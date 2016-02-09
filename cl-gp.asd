@@ -8,4 +8,6 @@
                #:iterate)
   :serial t
   :components ((:file "package")
+               (:file "graph")
+               (:file "program")
                (:file "cl-gp")))
