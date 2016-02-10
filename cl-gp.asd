@@ -9,5 +9,7 @@
   :serial t
   :components ((:file "package")
                (:file "graph")
+               (:file "node")
+               (:file "module")
                (:file "program")
                (:file "cl-gp")))
