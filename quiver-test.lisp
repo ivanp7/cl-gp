@@ -1,6 +1,31 @@
 
 (in-package #:cl-gp)
 
+(defparameter *q* (quiver/make-empty-quiver))
+
+(quiver/add-vertex! *q* 'v1 1)
+(quiver/add-vertex! *q* 'v2 2)
+(quiver/add-vertex! *q* 'v3 3)
+
+(quiver/add-arrow! *q* 'v1 'v2 'a0 0)
+(quiver/add-arrow! *q* 'v1 'v2 'a1 -1)
+(quiver/add-arrow! *q* 'v2 'v1 'a2 -2)
+(quiver/add-arrow! *q* 'v1 'v3 'a3 -3)
+(quiver/add-arrow! *q* 'v2 'v3 'a4 -4)
+
+(format t "~S~%" *q*) (terpri)
+
+(quiver/delete-arrow! *q* 'v2 'v3 'a4)
+
+(format t "~S~%" *q*) (terpri)
+
+(quiver/delete-vertex! *q* 'v3)
+
+(format t "~S~%" *q*) (terpri)
+
+(format t "~S~%" (quiver/vertex-arrows *q* 'v1)) (terpri)
+
+#|
 (defparameter *g* (graph/make-empty-graph))
 
 (graph/add-vertex! *g* 1 :value '(primitive if) :inputs '(cnd cns alt) :outputs '(result))
@@ -39,7 +64,7 @@
 
 (format t "~S~%" *g*)
 (terpri)
-
+|#
 #|
 (format t "~S ~S~%" (graph/add-vertex! *g* 1 'a) *g*)
 (format t "~S ~S~%" (graph/add-vertex! *g* 2 'b) *g*)
