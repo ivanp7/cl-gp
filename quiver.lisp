@@ -116,11 +116,12 @@
   (not (null (quiver~/vertex quiver vertex))))
 
 (defun quiver/vertex-arrows (quiver vertex)
-  (let ((arrows (remove-if-not
-                 #'(lambda (g)
-                     (or (funcall (quiver~/test quiver) (arrowgroup~/from g) vertex)
-                        (funcall (quiver~/test quiver) (arrowgroup~/to g) vertex)))
-                 (quiver~/arrowgroups quiver))))
+  (let ((arrows
+         (remove-if-not
+          #'(lambda (g)
+              (or (funcall (quiver~/test quiver) (arrowgroup~/from g) vertex)
+                 (funcall (quiver~/test quiver) (arrowgroup~/to g) vertex)))
+          (quiver~/arrowgroups quiver))))
     (mapcar #'(lambda (g)
                 (list (list (arrowgroup~/from g)
                             (arrowgroup~/to g))
@@ -170,10 +171,11 @@
                :key #'vertex~/key
                :test (quiver~/test quiver)))
     (setf (quiver~/arrowgroups quiver)
-       (delete-if #'(lambda (e)
-                      (or (funcall (quiver~/test quiver) (arrowgroup~/from e) vertex)
-                         (funcall (quiver~/test quiver) (arrowgroup~/to e) vertex)))
-                  (quiver~/arrowgroups quiver)))
+       (delete-if
+        #'(lambda (e)
+            (or (funcall (quiver~/test quiver) (arrowgroup~/from e) vertex)
+               (funcall (quiver~/test quiver) (arrowgroup~/to e) vertex)))
+        (quiver~/arrowgroups quiver)))
     t))
 
 
@@ -188,7 +190,8 @@
     (let ((group (quiver~/parallel-arrows quiver from to)))
       (if group
           (push (arrow~/new key value) (arrowgroup~/arrows group))
-          (push (arrowgroup~/new from to (arrow~/new key value)) (quiver~/arrowgroups quiver))))
+          (push (arrowgroup~/new from to (arrow~/new key value))
+                (quiver~/arrowgroups quiver))))
     t))
 
 (defun quiver/delete-arrow! (quiver from to key)
