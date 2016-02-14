@@ -31,13 +31,15 @@
   (cond
     ((and (eql callee-kind +callee/value+)
         (not (and (null inputs)
-              (/= (length outputs) 1))))
+              (> (length outputs) 0))))
      (error "NODE/NEW -- (value) incorrect node pins configuration"))
     ((and (eql callee-kind +callee/input+)
-        (not (null inputs)))
+        (not (and (null inputs)
+              (> (length outputs) 0))))
      (error "NODE/NEW -- (input) incorrect node pins configuration"))
     ((and (eql callee-kind +callee/output+)
-        (not (null outputs)))
+        (not (and (null outputs)
+              (> (length inputs) 0))))
      (error "NODE/NEW -- (output) incorrect node pins configuration")))
   (list callee-kind callee-name inputs outputs properties))
 
@@ -85,9 +87,9 @@
 
 (defun node/type (node)
   (cond
-    ((node/value? node) (typed-name/type (first (node/outputs node))))
+    ((node/value? node) (tuple/new (mapcar #'typed-name/type (node/outputs node))))
     ((or (node/primitive? node)
         (node/module? node))
-     (type/function-type (mapcar #'typed-name/type (node/inputs node))
-                         (mapcar #'typed-name/type (node/outputs node))))
+     (type/function-type (tuple/new (mapcar #'typed-name/type (node/inputs node)))
+                         (tuple/new (mapcar #'typed-name/type (node/outputs node)))))
     (t +type/impossible+)))

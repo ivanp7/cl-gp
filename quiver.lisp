@@ -128,7 +128,7 @@
 (defun (setf quiver/vertex-value) (new-value quiver vertex)
   (if (quiver/vertex-member? quiver vertex)
       (setf (gethash vertex (quiver~/vertices quiver)) new-value)
-      (error "SETF VERTEX-VALUE -- no such vertex ~S is in the quiver." vertex)))
+      (error "SETF VERTEX-VALUE -- no such vertex ~S is in the quiver" vertex)))
 
 (defun quiver/add-vertex! (quiver vertex &optional value)
   (unless (quiver/vertex-member? quiver vertex)
@@ -184,5 +184,5 @@
                         (quiver~/parallel-arrows-group quiver from to)
                         key (quiver~/test quiver)))
          new-value)
-      (error "SETF ARROW-VALUE -- no such arrow (~S -> ~S):~S is in the quiver."
+      (error "SETF ARROW-VALUE -- no such arrow (~S -> ~S):~S is in the quiver"
              from to key)))
