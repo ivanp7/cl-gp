@@ -8,7 +8,7 @@
                #:iterate)
   :serial t
   :components ((:file "package")
-               (:file "graph")
+               (:file "quiver")
                (:file "type")
                (:file "node")
                (:file "module")

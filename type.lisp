@@ -8,8 +8,19 @@
 
 ;;; *** function type ***
 
+(declaim (ftype function type/function-type? type/template?))
+
+(defun type/tuple? (typ)
+  (and (listp typ) (not (type/function-type? typ)) (not (type/template? typ))))
+
 (defun type/function-type (arguments results)
-  (list (copy-list arguments) '-> (copy-list results)))
+  (list (if (type/tuple? arguments)
+            (copy-list arguments)
+            arguments)
+        '->
+        (if (type/tuple? results)
+            (copy-list results)
+            results)))
 
 (defun type/function-type? (typ)
   (and (listp typ) (eql (second typ) '->)))
@@ -23,9 +34,9 @@
   (setf (first ftyp) new-value))
 
 (defun function-type/results (ftyp)
-  (third results))
+  (third ftyp))
 (defun (setf function-type/results) (new-value ftyp)
-  (setf (third results) new-value))
+  (setf (third ftyp) new-value))
 
 ;;; *** type template ***
 
