@@ -2,35 +2,36 @@
 
 (in-package #:cl-gp)
 
-(defconstant +type/impossible+ nil)
+(defconstant +type/bottom+ nil)
 (defconstant +type/void+ (list 'void))
+(defconstant +type/top+ t)
 
-(defun type/impossible? (typ)
+(defun type/bottom? (typ)
   (null typ))
 
 (defun type/void? (typ)
   (and (listp typ) (eql (first typ) 'void)))
 
-(defun type/simple? (typ)
-  (and typ (symbolp typ)))
+(defun type/top? (typ)
+  (eql typ t))
+
+(defun type/primitive? (typ)
+  (and typ (symbolp typ) (not (eql typ t))))
 
 (defun type/kind (typ)
   (cond
-    ((type/impossible? typ) nil)
-    ((type/simple? typ) 'simple)
+    ((type/bottom? typ) nil)
+    ((type/top? typ) t)
+    ((type/primitive? typ) 'primitive)
     (t (first typ))))
 
 ;;; *** tuple ***
 
 (defun tuple/new (list-of-types)
-  (if (notany #'type/void? list-of-types)
-      (if (some #'type/impossible? list-of-types)
-          +type/impossible+
-          (case (length list-of-types)
-            (0 +type/void+)
-            (1 (first list-of-types))
-            ((t) (cons 'tuple (copy-list list-of-types)))))
-      (error "TUPLE/NEW -- tuple cannot contain void type")))
+  (case (length list-of-types)
+    (0 +type/bottom+)
+    (1 (first list-of-types))
+    ((t) (cons 'tuple (copy-list list-of-types)))))
 
 (defun tuple/types (tuple)
   (cdr tuple))
@@ -43,15 +44,11 @@
 ;;; *** parametric type ***
 
 (defun parametric-type/new (name arguments)
-  (if (type/simple? name)
-      (if (zerop (length arguments))
+  (if (type/primitive? name)
+      (if (null arguments)
           name
-          (if (notany #'type/void? arguments)
-              (if (some #'type/impossible? arguments)
-                  +type/impossible+
-                  (list 'parametric name 'of (copy-list arguments)))
-              (error "PARAMETRIC-TYPE/NEW -- parametric type cannot have an argument of void type")))
-      (error "PARAMETRIC-TYPE/NEW -- parametric type name ~S in not a true symbol" name)))
+          (list 'parametric name 'of (copy-list arguments)))
+      (error "PARAMETRIC-TYPE/NEW -- parametric type name ~S in not a symbol" name)))
 
 (defun parametric-type/name (typ)
   (second typ))
@@ -69,10 +66,7 @@
 ;;; *** function type ***
 
 (defun function-type/new (argument result)
-  (if (or (type/impossible? argument)
-         (type/impossible? result))
-      +type/impossible+
-      (list 'function argument '-> result)))
+  (list 'function argument '-> result))
 
 (defun function-type/argument (ftyp)
   (second ftyp))
@@ -87,48 +81,44 @@
 (defun type/function-type? (typ)
   (and (listp typ) (eql (first typ) 'function)))
 
-;;; *** type template ***
+;;; *** type variable ***
 
-(defconstant +template/any+ (list 'template 'any))
-(defconstant +template/simple+ (list 'template 'simple))
+(defun type-variable~/new (id)
+  (list 'type-variable id))
 
-(defun template/enumeration (list-of-types)
-  (let ((list-of-types (remove +type/impossible+ list-of-types)))
-    (case (length list-of-types)
-      (0 +type/impossible+)
-      (1 (first list-of-types))
-      ((t) (list 'template 'enum list-of-types)))))
-
-(defun template-enumeration/types (typ)
-  (third typ))
-(defun (setf template-enumeration/types) (new-value typ)
-  (setf (third typ) new-value))
-
-(defun template/union (temp1 temp2)
-  +type/impossible+)
-
-(defun template/intersection (temp1 temp2)
-  +type/impossible+)
-
-(defun template/difference (temp1 temp2)
-  +type/impossible+)
-
-(defun type/template? (typ)
-  (ccase (type/kind typ)
-    (nil nil)
-    (simple nil)
-    (tuple (some #'type/template? (tuple/types typ)))
-    (parametric (some #'type/template? (parametric-type/arguments typ)))
-    (function (or (type/template? (function-type/argument typ))
-                 (type/template? (function-type/result typ))))
-    (template t)))
+(defun type-variable~/id (tvar)
+  (second tvar))
+(defun (setf type-variable~/id) (new-value tvar)
+  (setf (second tvar) new-value))
 
 ;;; *** other ***
 
 (defun type/compatible? (typ1 typ2)
   (cond
-    ((or (type/impossible? typ1)
-        (type/impossible? typ2)) nil)
-    ((and (not (type/template? typ1))
-        (not (type/template? typ2))) (equal typ1 typ2))
-    (t +type/impossible+)))
+    ((or (type/bottom? typ1)
+        (type/bottom? typ2)) nil)
+    ((or (type/void? typ1)
+        (type/void? typ2)) (and (type/void? typ1)
+                              (type/void? typ2)))
+    ((or (type/top? typ1)
+        (type/top? typ2)) t)
+    ((not (eql (type/kind typ1)
+             (type/kind typ2))) nil)
+    (t (case (type/kind typ1)
+         (primitive (eql typ1 typ2))
+         (tuple (and (= (length (tuple/types typ1))
+                      (length (tuple/types typ2)))
+                   (every #'identity (mapcar #'type/compatible?
+                                         (tuple/types typ1)
+                                         (tuple/types typ2)))))
+         (parametric (and (eql (parametric-type/name typ1)
+                             (parametric-type/name typ2))
+                        (= (length (parametric-type/arguments typ1))
+                           (length (parametric-type/arguments typ2)))
+                        (every #'identity (mapcar #'type/compatible?
+                                              (parametric-type/arguments typ1)
+                                              (parametric-type/arguments typ2)))))
+         (function (and (type/compatible? (function-type/argument typ1)
+                                        (function-type/argument typ2))
+                      (type/compatible? (function-type/result typ1)
+                                        (function-type/result typ2))))))))

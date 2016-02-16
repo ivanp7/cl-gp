@@ -87,9 +87,10 @@
 
 (defun node/type (node)
   (cond
-    ((node/value? node) (tuple/new (mapcar #'typed-name/type (node/outputs node))))
+    ((or (node/value? node)
+        (node/input? node)) (tuple/new (mapcar #'typed-name/type (node/outputs node))))
     ((or (node/primitive? node)
         (node/module? node))
-     (type/function-type (tuple/new (mapcar #'typed-name/type (node/inputs node)))
-                         (tuple/new (mapcar #'typed-name/type (node/outputs node)))))
-    (t +type/impossible+)))
+     (function-type/new (tuple/new (mapcar #'typed-name/type (node/inputs node)))
+                        (tuple/new (mapcar #'typed-name/type (node/outputs node)))))
+    (t +type/bottom+)))

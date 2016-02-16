@@ -92,7 +92,7 @@
                                 :to (arrow-direction~/to key)
                                 :group (parallel-arrows-group~/copy value))
                           groups)))
-              (quiver~/arrowgroups quiver))
+              (quiver~/parallel-arrows-groups quiver))
      groups))
 
 (defun quiver/vertex-arrows (quiver vertex)
