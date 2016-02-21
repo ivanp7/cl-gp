@@ -1,66 +1,109 @@
 ;;;; node.lisp
 
+;;; Public functions/constants/variables of the module:
+#|
+node/new-value
+node/new-primitive
+node/new-module
+node/new-input
+node/new-output
+node/copy
+
+node/kind
+node/name
+node/input-type
+node/output-type
+node/properties
+
+node/value?
+node/primitive?
+node/module?
+node/input?
+node/output?
+
+node/type
+|#
+
 (in-package #:cl-gp)
 
-;;; *** typed name ***
+;;; *** node kinds ***
 
-(defun typed-name/new (name typ)
-  (list name 'as typ))
-
-(defun typed-name/name (tname)
-  (first tname))
-(defun (setf typed-name/name) (new-value tname)
-  (setf (first tname) new-value))
-
-(defun typed-name/type (tname)
-  (third tname))
-(defun (setf typed-name/type) (new-value tname)
-  (setf (third tname) new-value))
-
-;;; *** callee kinds ***
-
-(defconstant +callee/value+ :value)
-(defconstant +callee/primitive+ :primitive)
-(defconstant +callee/module+ :module)
-(defconstant +callee/input+ :input)
-(defconstant +callee/output+ :output)
+(defconstant +node/value+ :value)
+(defconstant +node/primitive+ :primitive)
+(defconstant +node/module+ :module)
+(defconstant +node/input+ :input)
+(defconstant +node/output+ :output)
 
 ;;; *** node ***
 
-(defun node/new (callee-kind callee-name &key inputs outputs properties)
+(defun node~/new (kind name &key (input-type +type/bottom+)
+                              (output-type +type/bottom+)
+                              properties)
   (cond
-    ((and (eql callee-kind +callee/value+)
-        (not (and (null inputs)
-              (> (length outputs) 0))))
-     (error "NODE/NEW -- (value) incorrect node pins configuration"))
-    ((and (eql callee-kind +callee/input+)
-        (not (and (null inputs)
-              (> (length outputs) 0))))
-     (error "NODE/NEW -- (input) incorrect node pins configuration"))
-    ((and (eql callee-kind +callee/output+)
-        (not (and (null outputs)
-              (> (length inputs) 0))))
-     (error "NODE/NEW -- (output) incorrect node pins configuration")))
-  (list callee-kind callee-name inputs outputs properties))
+    ((and (eql kind +node/value+)
+        (or (not (type/bottom? input-type))
+           (type/bottom? output-type)))
+     (error "NODE~~/NEW -- node of kind 'value' has incorrect input/output type"))
+    ((and (eql kind +node/input+)
+        (or (not (type/bottom? input-type))
+           (type/bottom? output-type)))
+     (error "NODE~~/NEW -- node of kind 'input' has incorrect input/output type"))
+    ((and (eql kind +node/output+)
+        (or (type/bottom? input-type)
+           (not (type/bottom? output-type))))
+     (error "NODE~~/NEW -- node of kind 'output' has incorrect input/output type")))
+  (list kind name input-type output-type properties))
 
-(defun node/callee-kind (node)
+(defun node/new-value (name output-type &optional properties)
+  (node~/new +node/value+ name
+             :output-type output-type
+             :properties properties))
+
+(defun node/new-primitive (name input-type output-type &optional properties)
+  (node~/new +node/primitive+ name
+             :input-type input-type
+             :output-type output-type
+             :properties properties))
+
+(defun node/new-module (name input-type output-type &optional properties)
+  (node~/new +node/module+ name
+             :input-type input-type
+             :output-type output-type
+             :properties properties))
+
+(defun node/new-input (name output-type &optional properties)
+  (node~/new +node/input+ name
+             :output-type output-type
+             :properties properties))
+
+(defun node/new-output (name input-type &optional properties)
+  (node~/new +node/output+ name
+             :input-type input-type
+             :properties properties))
+
+(defun node/copy (node)
+  (copy-list node))
+
+
+
+(defun node/kind (node)
   (first node))
-(defun (setf node/callee-kind) (new-value node)
+(defun (setf node/kind) (new-value node)
   (setf (first node) new-value))
 
-(defun node/callee-name (node)
+(defun node/name (node)
   (second node))
-(defun (setf node/callee-name) (new-value node)
+(defun (setf node/name) (new-value node)
   (setf (second node) new-value))
 
-(defun node/inputs (node)
+(defun node/input-type (node)
   (third node))
-(defun (setf node/inputs) (new-value node)
+(defun (setf node/input-type) (new-value node)
   (setf (third node) new-value))
 
-(defun node/outputs (node)
+(defun node/output-type (node)
   (fourth node))
-(defun (setf node/outputs) (new-value node)
+(defun (setf node/output-type) (new-value node)
   (setf (fourth node) new-value))
 
 (defun node/properties (node)
@@ -69,28 +112,25 @@
   (setf (fifth node) new-value))
 
 (defun node/value? (node)
-  (eql (node/callee-kind node) +callee/value+))
+  (eql (node/kind node) +node/value+))
 
 (defun node/primitive? (node)
-  (eql (node/callee-kind node) +callee/primitive+))
+  (eql (node/kind node) +node/primitive+))
 
 (defun node/module? (node)
-  (eql (node/callee-kind node) +callee/module+))
+  (eql (node/kind node) +node/module+))
 
 (defun node/input? (node)
-  (eql (node/callee-kind node) +callee/input+))
+  (eql (node/kind node) +node/input+))
 
 (defun node/output? (node)
-  (eql (node/callee-kind node) +callee/output+))
-
-;;; *** node type ***
+  (eql (node/kind node) +node/output+))
 
 (defun node/type (node)
   (cond
-    ((or (node/value? node)
-        (node/input? node)) (tuple/new (mapcar #'typed-name/type (node/outputs node))))
+    ((node/value? node) (node/output-type node))
     ((or (node/primitive? node)
         (node/module? node))
-     (function-type/new (tuple/new (mapcar #'typed-name/type (node/inputs node)))
-                        (tuple/new (mapcar #'typed-name/type (node/outputs node)))))
+     (function-type/new (node/input-type node)
+                        (node/output-type node)))
     (t +type/bottom+)))

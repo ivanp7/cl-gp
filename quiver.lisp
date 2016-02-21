@@ -1,6 +1,30 @@
 ;;;; quiver.lisp
 ;;;; A quiver (multidigraph) implementation
 
+;;; Public functions/constants/variables of the module:
+#|
+quiver/make-empty-quiver
+quiver/properties
+quiver/vertex-test
+quiver/arrow-key-test
+
+quiver/vertex-arrows
+quiver/vertex-inputs
+quiver/vertex-outputs
+quiver/vertex-loops
+
+quiver/all-vertices
+quiver/vertex-exists?
+quiver/vertex-value
+quiver/add-vertex!
+quiver/delete-vertex!
+
+quiver/arrow-exists?
+quiver/add-arrow!
+quiver/delete-arrow!
+quiver/arrow-value
+|#
+
 (in-package #:cl-gp)
 
 ;;; *** quiver arrow ***
@@ -35,9 +59,6 @@
 
 ;;; *** arrow group ***
 
-(defun parallel-arrows-group~/copy (group)
-  (copy-alist group))
-
 (defun parallel-arrows-group~/add-arrow! (group arrow)
   (cons arrow group))
 
@@ -49,25 +70,30 @@
 
 ;;; *** quiver ***
 
-(defun quiver/make-empty-quiver (&key properties (test #'equal))
-  (list :properties properties
-        :v (make-hash-table :test test)
+(defun quiver/make-empty-quiver (&key properties (vertex-test #'equal)
+                                   (arrow-key-test vertex-test))
+  (list :v (make-hash-table :test vertex-test)
         :a (make-hash-table
             :test #'(lambda (key1 key2)
-                      (and (funcall test
+                      (and (funcall vertex-test
                                   (arrow-direction~/from key1)
                                   (arrow-direction~/from key2))
-                         (funcall test
+                         (funcall vertex-test
                                   (arrow-direction~/to key1)
-                                  (arrow-direction~/to key2)))))))
+                                  (arrow-direction~/to key2)))))
+        :properties properties
+        :arrow-key-test arrow-key-test))
 
 (defun quiver/properties (quiver)
   (getf quiver :properties))
 (defun (setf quiver/properties) (new-value quiver)
   (setf (getf quiver :properties) new-value))
 
-(defun quiver~/test (quiver)
+(defun quiver/vertex-test (quiver)
   (hash-table-test (getf quiver :v)))
+
+(defun quiver/arrow-key-test (quiver)
+  (getf quiver :arrow-key-test))
 
 (defun quiver~/vertices (quiver)
   (getf quiver :v))
@@ -85,12 +111,12 @@
 
 
 (defmacro quiver~/vertex-arrows-getter (selector)
-  `(let (groups (test (quiver~/test quiver)))
+  `(let (groups (test (quiver/vertex-test quiver)))
      (maphash #'(lambda (key value)
                   (when ,selector
                     (push (list :from (arrow-direction~/from key)
                                 :to (arrow-direction~/to key)
-                                :group (parallel-arrows-group~/copy value))
+                                :arrows (mapcar #'arrow~/key value))
                           groups)))
               (quiver~/parallel-arrows-groups quiver))
      groups))
@@ -120,24 +146,24 @@
 (defun quiver/all-vertices (quiver)
   (alexandria:hash-table-keys (quiver~/vertices quiver)))
 
-(defun quiver/vertex-member? (quiver vertex)
+(defun quiver/vertex-exists? (quiver vertex)
   (nth-value 1 (gethash vertex (quiver~/vertices quiver))))
 
 (defun quiver/vertex-value (quiver vertex)
   (gethash vertex (quiver~/vertices quiver)))
 (defun (setf quiver/vertex-value) (new-value quiver vertex)
-  (if (quiver/vertex-member? quiver vertex)
+  (if (quiver/vertex-exists? quiver vertex)
       (setf (gethash vertex (quiver~/vertices quiver)) new-value)
       (error "SETF VERTEX-VALUE -- no such vertex ~S is in the quiver" vertex)))
 
 (defun quiver/add-vertex! (quiver vertex &optional value)
-  (unless (quiver/vertex-member? quiver vertex)
+  (unless (quiver/vertex-exists? quiver vertex)
     (setf (gethash vertex (quiver~/vertices quiver)) value)
     t))
 
 (defun quiver/delete-vertex! (quiver vertex)
   (when (remhash vertex (quiver~/vertices quiver))
-    (let ((test (quiver~/test quiver)))
+    (let ((test (quiver/vertex-test quiver)))
       (alexandria:maphash-keys
        #'(lambda (key)
            (if (or (funcall test (arrow-direction~/from key) vertex)
@@ -148,15 +174,15 @@
 
 
 
-(defun quiver/arrow-exist? (quiver from to key)
+(defun quiver/arrow-exists? (quiver from to key)
   (not (null (parallel-arrows-group~/find-arrow
             (quiver~/parallel-arrows-group quiver from to)
-            key (quiver~/test quiver)))))
+            key (quiver/arrow-key-test quiver)))))
 
 (defun quiver/add-arrow! (quiver from to key &optional value)
-  (when (and (quiver/vertex-member? quiver from)
-           (quiver/vertex-member? quiver to)
-           (not (quiver/arrow-exist? quiver from to key)))
+  (when (and (quiver/vertex-exists? quiver from)
+           (quiver/vertex-exists? quiver to)
+           (not (quiver/arrow-exists? quiver from to key)))
     (setf (quiver~/parallel-arrows-group quiver from to)
        (parallel-arrows-group~/add-arrow!
         (quiver~/parallel-arrows-group quiver from to)
@@ -164,11 +190,11 @@
     t))
 
 (defun quiver/delete-arrow! (quiver from to key)
-  (when (quiver/arrow-exist? quiver from to key)
+  (when (quiver/arrow-exists? quiver from to key)
     (setf (quiver~/parallel-arrows-group quiver from to)
        (parallel-arrows-group~/delete-arrow!
         (quiver~/parallel-arrows-group quiver from to)
-        key (quiver~/test quiver)))
+        key (quiver/arrow-key-test quiver)))
     (if (null (quiver~/parallel-arrows-group quiver from to))
         (remhash (arrow-direction~/new from to)
                  (quiver~/parallel-arrows-group quiver from to)))
@@ -177,12 +203,12 @@
 (defun quiver/arrow-value (quiver from to key)
   (arrow~/value (parallel-arrows-group~/find-arrow
                  (quiver~/parallel-arrows-group quiver from to)
-                 key (quiver~/test quiver))))
+                 key (quiver/arrow-key-test quiver))))
 (defun (setf quiver/arrow-value) (new-value quiver from to key)
-  (if (quiver/arrow-exist? quiver from to key)
+  (if (quiver/arrow-exists? quiver from to key)
       (setf (arrow~/value (parallel-arrows-group~/find-arrow
                         (quiver~/parallel-arrows-group quiver from to)
-                        key (quiver~/test quiver)))
+                        key (quiver/arrow-key-test quiver)))
          new-value)
       (error "SETF ARROW-VALUE -- no such arrow (~S -> ~S):~S is in the quiver"
              from to key)))

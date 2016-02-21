@@ -1,5 +1,38 @@
 ;;;; type.lisp
 
+;;; Public functions/constants/variables of the module:
+#|
++type/bottom+
++type/void+
++type/top+
+
+type/bottom?
+type/void?
+type/top?
+type/primitive?
+type/kind
+
+field/new
+field/type
+field/name
+record/new
+record/fields
+type/record?
+record/recursive-field-search
+
+parametric-type/new
+parametric-type/name
+parametric-type/arguments
+type/parametric?
+
+function-type/new
+function-type/argument
+function-type/result
+type/function-type?
+
+type/compatible?
+|#
+
 (in-package #:cl-gp)
 
 (defconstant +type/bottom+ nil)
@@ -25,21 +58,51 @@
     ((type/primitive? typ) 'primitive)
     (t (first typ))))
 
-;;; *** tuple ***
+;;; *** record ***
 
-(defun tuple/new (list-of-types)
-  (case (length list-of-types)
+(defun field/new (typ name)
+  (cons typ name))
+
+(defun field/type (field)
+  (car field))
+(defun (setf field/type) (new-value field)
+  (setf (car field) new-value))
+
+(defun field/name (field)
+  (cdr field))
+(defun (setf field/name) (new-value field)
+  (setf (cdr field) new-value))
+
+(defun record/new (fields)
+  (case (length fields)
     (0 +type/bottom+)
-    (1 (first list-of-types))
-    ((t) (cons 'tuple (copy-list list-of-types)))))
+    (1 (first (field/type fields)))
+    (t (if (= (length fields)
+              (length (remove-duplicates fields
+                                         :key #'field/name
+                                         :test #'eql)))
+           (cons 'record (copy-list fields))
+           (error "RECORD/NEW -- record cannot have fields with identical names")))))
 
-(defun tuple/types (tuple)
-  (cdr tuple))
-(defun (setf tuple/types) (new-value tuple)
-  (setf (cdr tuple) new-value))
+(defun record/fields (record)
+  (cdr record))
+(defun (setf record/fields) (new-value record)
+  (setf (cdr record) new-value))
 
-(defun type/tuple? (typ)
-  (and (listp typ) (eql (first typ) 'tuple)))
+(defun type/record? (typ)
+  (and (listp typ) (eql (first typ) 'record)))
+
+(defun record/nested-search (record names-list)
+  (if (null names-list)
+      record
+      (if (type/record? record)
+          (let ((field (find (car names-list) record
+                             :key #'field/name :test #'eql)))
+            (if field
+                (record/nested-search
+                 (field/type field) (cdr names-list))
+                +type/bottom+))
+          +type/bottom+)))
 
 ;;; *** parametric type ***
 
@@ -83,6 +146,7 @@
 
 ;;; *** type variable ***
 
+#|
 (defun type-variable~/new (id)
   (list 'type-variable id))
 
@@ -90,6 +154,9 @@
   (second tvar))
 (defun (setf type-variable~/id) (new-value tvar)
   (setf (second tvar) new-value))
+|#
+
+;;; *** TODO: add type classes ***
 
 ;;; *** other ***
 
@@ -106,11 +173,15 @@
              (type/kind typ2))) nil)
     (t (case (type/kind typ1)
          (primitive (eql typ1 typ2))
-         (tuple (and (= (length (tuple/types typ1))
-                      (length (tuple/types typ2)))
-                   (every #'identity (mapcar #'type/compatible?
-                                         (tuple/types typ1)
-                                         (tuple/types typ2)))))
+         (record (and (= (length (record/fields typ1))
+                       (length (record/fields typ2)))
+                    (alexandria:set-equal (record/fields typ1)
+                                          (record/fields typ2)
+                                          :test #'(lambda (f1 f2)
+                                                    (and (eql (field/name f1)
+                                                            (field/name f2))
+                                                       (type/compatible? (field/type f1)
+                                                                         (field/type f2)))))))
          (parametric (and (eql (parametric-type/name typ1)
                              (parametric-type/name typ2))
                         (= (length (parametric-type/arguments typ1))
