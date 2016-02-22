@@ -12,5 +12,5 @@
                (:file "type")
                (:file "node")
                (:file "module")
-               (:file "program")
+               (:file "interpreter")
                (:file "cl-gp")))

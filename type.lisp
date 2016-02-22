@@ -96,7 +96,7 @@ type/compatible?
   (if (null names-list)
       record
       (if (type/record? record)
-          (let ((field (find (car names-list) record
+          (let ((field (find (car names-list) (record/fields record)
                              :key #'field/name :test #'eql)))
             (if field
                 (record/nested-search

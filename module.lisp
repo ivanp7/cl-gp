@@ -37,28 +37,69 @@ module/connect!
 module/disconnect!
 
 module/node
+
+module/diagram
 |#
 
 (in-package #:cl-gp)
 
+;;; *** node metric ***
+
+(defun metric~/new (neutral? &optional (value (if neutral? 1 0)))
+  (cons neutral? value))
+
+(defun metric~/neutral? (metric)
+  (car metric))
+(defun (setf metric~/neutral?) (new-value metric)
+  (setf (car metric) new-value))
+
+(defun metric~/value (metric)
+  (cdr metric))
+(defun (setf metric~/value) (new-value metric)
+  (setf (cdr metric) new-value))
+
+(defun metric~/1+ (metric)
+  (metric~/new (metric~/neutral? metric)
+               (1+ (metric~/value metric))))
+
+(defun metric~/test= (m1 m2)
+  (and (eql (metric~/neutral? m1)
+          (metric~/neutral? m2))
+     (= (metric~/value m1) (metric~/value m2))))
+
+(defun metric~/test< (m1 m2)
+  (cond
+    ((eql (metric~/neutral? m1)
+          (metric~/neutral? m2))
+     (< (metric~/value m1) (metric~/value m2)))
+    ((metric~/neutral? m1) nil)
+    (t t)))
+
+(defun metric~/min (m1 m2)
+  (if (metric~/test< m1 m2) m1 m2))
+
+(defun metric~/copy (metric)
+  (metric~/new (metric~/neutral? metric)
+               (metric~/value metric)))
+
 ;;; *** node state ***
 
-(defun node+state~/new (node &optional state)
-  (cons node state))
+(defun node+state~/new (node metric)
+  (list node metric))
 
 (defun node+state~/node (nstate)
-  (car nstate))
+  (first nstate))
 (defun (setf node+state~/node) (new-value nstate)
-  (setf (car nstate) new-value))
+  (setf (first nstate) new-value))
 
-(defun node+state~/state (nstate)
-  (cdr nstate))
-(defun (setf node+state~/state) (new-value nstate)
-  (setf (cdr nstate) new-value))
+(defun node+state~/metric (nstate)
+  (second nstate))
+(defun (setf node+state~/metric) (new-value nstate)
+  (setf (second nstate) new-value))
 
 ;;; *** node socket ***
 
-(defun node-socket/new (index field-selector)
+(defun node-socket/new (index &optional field-selector)
   (cons index (copy-list field-selector)))
 
 (defun node-socket/node-index (socket)
@@ -130,7 +171,7 @@ module/node
 
 ;;; *** module ***
 
-(defun module/new (name properties)
+(defun module/new (name &optional properties)
   (quiver/make-empty-quiver
    :properties (list 0 name properties)))
 
@@ -150,7 +191,7 @@ module/node
   (setf (third (quiver/properties module)) new-value))
 
 (defun module~/node+state (module index)
-  (quiver/vertex-value (quiver~/vertices module) index))
+  (quiver/vertex-value module index))
 
 (defun module/all-nodes (module)
   (quiver/all-vertices module))
@@ -163,7 +204,8 @@ module/node
                (field/new (node/name node) (node/output-type node)))
            (delete-if-not #'node/input?
                           (mapcar #'(lambda (index)
-                                      (node+state~/node (module~/node+state module index)))
+                                      (node+state~/node
+                                       (module~/node+state module index)))
                                   (module/all-nodes module))))))
 
 (defun module/output-type (module)
@@ -172,14 +214,17 @@ module/node
                (field/new (node/name node) (node/input-type node)))
            (delete-if-not #'node/output?
                           (mapcar #'(lambda (index)
-                                      (node+state~/node (module~/node+state module index)))
+                                      (node+state~/node
+                                       (module~/node+state module index)))
                                   (module/all-nodes module))))))
 
 
 
 (defun module/add-node! (module node)
   (let ((index (incf (module~/max-index module))))
-    (quiver/add-vertex! module index (node+state~/new node))
+    (quiver/add-vertex! module index
+                        (node+state~/new node
+                                         (metric~/new (not (node/output? node)))))
     index))
 
 (defun module/delete-node! (module index)
@@ -204,6 +249,29 @@ module/node
               (mapcar #'connection/copy (getf group :arrows)))
           (append (quiver/vertex-loops module index)
                   (quiver/vertex-outputs module index))))
+
+(defun module~/update-metric (module index)
+  (let ((dest-metrics
+         (mapcar #'(lambda (conn)
+                     (node+state~/metric
+                      (module~/node+state
+                       module (node-socket/node-index
+                               (connection/destination-socket conn)))))
+                 (module/node-output-connections module index)))
+        (node-state (module~/node+state module index)))
+    (if dest-metrics
+        (let ((new-metric
+               (metric~/1+
+                (reduce #'metric~/min dest-metrics))))
+          (unless (metric~/test= new-metric
+                                 (node+state~/metric node-state))
+            (setf (node+state~/metric node-state) new-metric)
+            (dolist (conn (module/node-input-connections module index))
+              (module~/update-metric module
+                                     (node-socket/node-index
+                                      (connection/source-socket conn))))))
+        (setf (node+state~/metric node-state)
+           (metric~/new (not (node/output? (node+state~/node node-state))))))))
 
 
 
@@ -230,25 +298,36 @@ module/node
                        :input)))
 
 (defun module/connected? (module conn)
-  (quiver/arrow-exists? module
-                        (node-socket/node-index (connection/source-socket conn))
-                        (node-socket/node-index (connection/destination-socket conn))
-                        conn))
+  (quiver/arrow-exists?
+   module
+   (node-socket/node-index (connection/source-socket conn))
+   (node-socket/node-index (connection/destination-socket conn))
+   conn))
 
-(defun module/connect! (module conn priority)
+(defun module/connect! (module conn priority &optional properties)
   (when (and (not (module/connected? module conn))
            (module/connection-possible? module conn))
-    (quiver/add-arrow! module
-                       (node-socket/node-index (connection/source-socket conn))
-                       (node-socket/node-index (connection/destination-socket conn))
-                       conn
-                       (conn-state~/new priority))))
+    (when (quiver/add-arrow!
+           module
+           (node-socket/node-index (connection/source-socket conn))
+           (node-socket/node-index (connection/destination-socket conn))
+           conn
+           (conn-state~/new priority properties))
+      (module~/update-metric module
+                             (node-socket/node-index
+                              (connection/source-socket conn)))
+      t)))
 
 (defun module/disconnect! (module conn)
-  (quiver/delete-arrow! module
-                        (node-socket/node-index (connection/source-socket conn))
-                        (node-socket/node-index (connection/destination-socket conn))
-                        conn))
+  (when (quiver/delete-arrow!
+         module
+         (node-socket/node-index (connection/source-socket conn))
+         (node-socket/node-index (connection/destination-socket conn))
+         conn)
+    (module~/update-metric module
+                           (node-socket/node-index
+                            (connection/source-socket conn)))
+    t))
 
 
 
@@ -265,3 +344,20 @@ module/node
     (unless (module/connection-possible? module conn)
       (module/disconnect! module conn)))
   new-node)
+
+
+
+(defun module/diagram (module)
+  (sort (iterate:iter
+          (iterate:for index iterate:in (module/all-nodes module))
+          (iterate:collect
+              (let ((node-state (module~/node+state module index))
+                    (input-conns (module/node-input-connections module index))
+                    (output-conns (module/node-output-connections module index)))
+                (list (list index (metric~/copy
+                                   (node+state~/metric node-state)))
+                      input-conns '->
+                      (list (node/kind (node+state~/node node-state))
+                            (node/name (node+state~/node node-state)))
+                      '-> output-conns))))
+        #'metric~/test< :key #'(lambda (entry) (second (first entry)))))

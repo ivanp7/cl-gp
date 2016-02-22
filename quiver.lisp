@@ -70,17 +70,11 @@ quiver/arrow-value
 
 ;;; *** quiver ***
 
-(defun quiver/make-empty-quiver (&key properties (vertex-test #'equal)
-                                   (arrow-key-test vertex-test))
-  (list :v (make-hash-table :test vertex-test)
-        :a (make-hash-table
-            :test #'(lambda (key1 key2)
-                      (and (funcall vertex-test
-                                  (arrow-direction~/from key1)
-                                  (arrow-direction~/from key2))
-                         (funcall vertex-test
-                                  (arrow-direction~/to key1)
-                                  (arrow-direction~/to key2)))))
+(defun quiver/make-empty-quiver (&key properties (vertex-hashtable-test 'equal)
+                                   (arrow-key-test #'equal))
+  (list :v (make-hash-table :test vertex-hashtable-test)
+        :a (make-hash-table :test (if (eql vertex-hashtable-test 'equalp)
+                                      'equalp 'equal))
         :properties properties
         :arrow-key-test arrow-key-test))
 
