@@ -30,6 +30,11 @@ function-type/argument
 function-type/result
 type/function-type?
 
+type-class/new
+type-class/name
+type-class/type-test
+type/type-class?
+
 type/compatible?
 |#
 
@@ -144,6 +149,24 @@ type/compatible?
 (defun type/function-type? (typ)
   (and (listp typ) (eql (first typ) 'function)))
 
+;;; *** type class ***
+
+(defun type-class/new (name &optional (type-test (constantly t)))
+  (list 'type-class name type-test))
+
+(defun type-class/name (typ)
+  (second typ))
+(defun (setf type-class/name) (new-value typ)
+  (setf (second typ) new-value))
+
+(defun type-class/type-test (typ)
+  (third typ))
+(defun (setf type-class/type-test) (new-value typ)
+  (setf (third typ) new-value))
+
+(defun type/type-class? (typ)
+  (and (listp typ) (eql (first typ) 'type-class)))
+
 ;;; *** type variable ***
 
 #|
@@ -156,40 +179,44 @@ type/compatible?
   (setf (second tvar) new-value))
 |#
 
-;;; *** TODO: add type classes ***
-
 ;;; *** other ***
 
 (defun type/compatible? (typ1 typ2)
   (cond
     ((or (type/bottom? typ1)
-         (type/bottom? typ2)) nil)
+        (type/bottom? typ2)) nil)
     ((or (type/void? typ1)
-         (type/void? typ2)) (and (type/void? typ1)
-                                 (type/void? typ2)))
+        (type/void? typ2)) (and (type/void? typ1)
+                              (type/void? typ2)))
     ((or (type/top? typ1)
-         (type/top? typ2)) t)
+        (type/top? typ2)) t)
     ((not (eql (type/kind typ1)
-               (type/kind typ2))) nil)
+             (type/kind typ2)))
+     (cond
+       ((type/type-class? typ1) (funcall (type-class/type-test typ1) typ2))
+       ((type/type-class? typ2) (funcall (type-class/type-test typ2) typ1))))
     (t (case (type/kind typ1)
          (primitive (eql typ1 typ2))
          (record (and (= (length (record/fields typ1))
-                         (length (record/fields typ2)))
-                      (alexandria:set-equal (record/fields typ1)
-                                            (record/fields typ2)
-                                            :test #'(lambda (f1 f2)
-                                                      (and (eql (field/name f1)
-                                                                (field/name f2))
-                                                           (type/compatible? (field/type f1)
-                                                                             (field/type f2)))))))
+                       (length (record/fields typ2)))
+                    (alexandria:set-equal
+                     (record/fields typ1)
+                     (record/fields typ2)
+                     :test #'(lambda (f1 f2)
+                               (and (eql (field/name f1)
+                                       (field/name f2))
+                                  (type/compatible? (field/type f1)
+                                                    (field/type f2)))))))
          (parametric (and (eql (parametric-type/name typ1)
-                               (parametric-type/name typ2))
-                          (= (length (parametric-type/arguments typ1))
-                             (length (parametric-type/arguments typ2)))
-                          (every #'identity (mapcar #'type/compatible?
-                                                    (parametric-type/arguments typ1)
-                                                    (parametric-type/arguments typ2)))))
+                             (parametric-type/name typ2))
+                        (= (length (parametric-type/arguments typ1))
+                           (length (parametric-type/arguments typ2)))
+                        (every #'identity (mapcar #'type/compatible?
+                                              (parametric-type/arguments typ1)
+                                              (parametric-type/arguments typ2)))))
          (function (and (type/compatible? (function-type/argument typ1)
-                                          (function-type/argument typ2))
-                        (type/compatible? (function-type/result typ1)
-                                          (function-type/result typ2))))))))
+                                        (function-type/argument typ2))
+                      (type/compatible? (function-type/result typ1)
+                                        (function-type/result typ2))))
+         (type-class (eql (type-class/name typ1)
+                          (type-class/name typ2)))))))
