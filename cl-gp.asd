@@ -5,10 +5,10 @@
   :author "ivanp7 <ivanp7@mail.ru>"
   :license "MIT"
   :depends-on (#:alexandria
+               #:cl-graph
                #:iterate)
   :serial t
   :components ((:file "package")
-               (:file "quiver")
                (:file "type")
                (:file "node")
                (:file "module")
