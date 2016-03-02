@@ -3,6 +3,8 @@
 ;;; Public symbols of the file:
 #|
 type/abstract
+type/value-test=
+
 type-object?
 type/kind
 type-of-kind?
@@ -57,7 +59,14 @@ function-type/result
 make-function-type
 type/function?
 
-type/compatible?
+typed-value
+typed-value/value
+typed-value/type
+make-typed-value
+typed-value-object?
+typed-value/equal?
+
+object/compatible?
 |#
 
 (in-package #:cl-gp)
@@ -65,7 +74,9 @@ type/compatible?
 
 
 (defclass type/abstract ()
-  ())
+  ((test= :reader type/value-test=
+          :initarg :test=
+          :initform (constantly nil))))
 
 (defmethod initialize-instance :after ((instance type/abstract) &key)
   (if (alexandria:type= (type-of instance) 'type/abstract)
@@ -173,12 +184,12 @@ type/compatible?
     (with-slots (name arguments) instance
       (format st "PARAMETRIC-TYPE: ~S of ~S" name arguments))))
 
-(declaim (ftype function make-primitive))
+(declaim (ftype function make-primitive-type))
 
-(defun make-parametric-type (name arguments-list)
+(defun make-parametric-type (name arguments-list &optional (test= #'equalp))
   (if (zerop (length arguments-list))
-      (make-primitive-type name)
-      (make-instance 'type/parametric :name name :arguments arguments-list)))
+      (make-primitive-type name test=)
+      (make-instance 'type/parametric :name name :arguments arguments-list :test= test=)))
 
 (defun parametric-type/arguments (parametric)
   (with-slots (arguments) parametric
@@ -199,8 +210,8 @@ type/compatible?
     (with-slots (name) instance
       (format st "PRIMITIVE-TYPE: ~S" name))))
 
-(defun make-primitive-type (name)
-  (make-instance 'type/primitive :name name))
+(defun make-primitive-type (name &optional (test= #'equalp))
+  (make-instance 'type/primitive :name name :test= test=))
 
 (defun type/primitive? (type)
   (typep type 'type/primitive))
@@ -240,7 +251,7 @@ type/compatible?
     (with-slots (fields) instance
       (format st "RECORD: ~S fields: ~S" (length fields) fields))))
 
-(defun make-record (fields-list)
+(defun make-record (fields-list &optional (test= #'equalp))
   (case (length fields-list)
     (0 +type/bottom+)
     (1 (field/type (first fields-list)))
@@ -248,7 +259,7 @@ type/compatible?
               (length (remove-duplicates fields-list
                                          :key #'field/name
                                          :test *field/name-test*)))
-           (make-instance 'type/record :fields fields-list)
+           (make-instance 'type/record :fields fields-list :test= test=)
            (error "MAKE-RECORD -- record cannot have fields with identical names")))))
 
 (defun record/fields (record)
@@ -286,50 +297,96 @@ type/compatible?
     (with-slots (argument result) instance
       (format st "FUNCTION-TYPE: ~S -> ~S" argument result))))
 
-(defun make-function-type (argument result)
-  (make-instance 'type/function :argument argument :result result))
+(defun make-function-type (argument result &optional (test= #'equalp))
+  (make-instance 'type/function :argument argument :result result :test= test=))
 
 (defun type/function? (type)
   (typep type 'type/function))
 
-;;; *** other ***
+;;; *** typed value ***
 
-(defun type/compatible? (typ1 typ2)
+(defclass typed-value ()
+  ((object :accessor typed-value/value
+           :initarg :value
+           :initform nil)
+   (object-type :reader typed-value/type
+                :initarg :type
+                :initform +type/bottom+)))
+
+(defmethod initialize-instance :after ((instance typed-value) &key)
+  (with-slots (object-type) instance
+    (cond
+      ((not (type-object? object-type))
+       (error "TYPED-VALUE -- invalid object type is specified"))
+      ((type/class? object-type)
+       (error "TYPED-VALUE -- cannot create object of a type class")))))
+
+(defmethod print-object ((instance typed-value) st)
+  (print-unreadable-object (instance st)
+    (with-slots (object object-type) instance
+      (format st "VALUE: ~S as ~S" object object-type))))
+
+(defun make-typed-value (object object-type)
+  (make-instance 'typed-value :value object :type object-type))
+
+(defun typed-value-object? (object)
+  (typep object 'typed-value))
+
+(defun typed-value/equal? (val1 val2)
+  (if (eql (type/value-test= (typed-value/type val1))
+           (type/value-test= (typed-value/type val2)))
+      (funcall (type/value-test= (typed-value/type val1))
+               (typed-value/value val1) (typed-value/value val2))
+      (or (funcall (type/value-test= (typed-value/type val1))
+                  (typed-value/value val1) (typed-value/value val2))
+         (funcall (type/value-test= (typed-value/type val2))
+                  (typed-value/value val1) (typed-value/value val2)))))
+
+;;; *** object compatibility test ***
+
+(defun object/compatible? (obj1 obj2)
   (cond
-    ((and (type-of-kind? typ1 'type/class)
-        (type-of-kind? typ2 'type/class))
-     (funcall *type/name-test* (type-class/name typ1) (type-class/name typ2)))
-    ((or (type-of-kind? typ1 'type/class)
-        (type-of-kind? typ2 'type/class))
-     (if (type-of-kind? typ1 'type/class)
-         (funcall (type-class/type-test typ1) typ2)
-         (funcall (type-class/type-test typ2) typ1)))
-    ((and (type-of-kind? typ1 'type/parametric)
-        (type-of-kind? typ2 'type/parametric))
+    ((and (typed-value-object? obj1) (typed-value-object? obj2))
+     (and (object/compatible? (typed-value/type obj1)
+                            (typed-value/type obj2))
+        (typed-value/equal? obj1 obj2)))
+    ((not (and (type-object? obj1) (type-object? obj2))) nil)
+    ((and (type-of-kind? obj1 'type/class)
+        (type-of-kind? obj2 'type/class))
+     (and (not (type/bottom? obj1)) (not (type/bottom? obj2))
+        (funcall *type/name-test* (type-class/name obj1) (type-class/name obj2))
+        (eql (type-class/type-test obj1) (type-class/type-test obj2))))
+    ((or (type-of-kind? obj1 'type/class)
+        (type-of-kind? obj2 'type/class))
+     (if (type-of-kind? obj1 'type/class)
+         (funcall (type-class/type-test obj1) obj2)
+         (funcall (type-class/type-test obj2) obj1)))
+    ((and (type-of-kind? obj1 'type/parametric)
+        (type-of-kind? obj2 'type/parametric))
      (and (funcall *type/name-test*
-                 (parametric-type/name typ1)
-                 (parametric-type/name typ2))
-        (= (length (parametric-type/arguments typ1))
-           (length (parametric-type/arguments typ2)))
-        (every #'type/compatible?
-           (parametric-type/arguments typ1)
-           (parametric-type/arguments typ2))))
-    ((and (type-of-kind? typ1 'type/record)
-        (type-of-kind? typ2 'type/record))
-     (and (= (length (record/fields typ1))
-           (length (record/fields typ2)))
-        (alexandria:set-equal (record/fields typ1)
-                              (record/fields typ2)
+                 (parametric-type/name obj1)
+                 (parametric-type/name obj2))
+        (= (length (parametric-type/arguments obj1))
+           (length (parametric-type/arguments obj2)))
+        (every #'object/compatible?
+           (parametric-type/arguments obj1)
+           (parametric-type/arguments obj2))))
+    ((and (type-of-kind? obj1 'type/record)
+        (type-of-kind? obj2 'type/record))
+     (and (= (length (record/fields obj1))
+           (length (record/fields obj2)))
+        (alexandria:set-equal (record/fields obj1)
+                              (record/fields obj2)
                               :test
                               #'(lambda (field1 field2)
                                   (and (funcall *field/name-test*
                                               (field/name field1)
                                               (field/name field2))
-                                     (type/compatible? (field/type field1)
-                                                       (field/type field2)))))))
-    ((and (type-of-kind? typ1 'type/function)
-        (type-of-kind? typ2 'type/function))
-     (and (type/compatible? (function-type/argument typ1)
-                          (function-type/argument typ2))
-        (type/compatible? (function-type/result typ1)
-                          (function-type/result typ2))))))
+                                     (object/compatible? (field/type field1)
+                                                         (field/type field2)))))))
+    ((and (type-of-kind? obj1 'type/function)
+        (type-of-kind? obj2 'type/function))
+     (and (object/compatible? (function-type/argument obj1)
+                            (function-type/argument obj2))
+        (object/compatible? (function-type/result obj1)
+                            (function-type/result obj2))))))

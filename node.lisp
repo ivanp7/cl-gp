@@ -2,135 +2,172 @@
 
 ;;; Public functions/constants/variables of the module:
 #|
-node/new-value
-node/new-primitive
-node/new-module
-node/new-input
-node/new-output
-node/copy
-
-node/kind
+node/abstract
 node/name
+node/id
+node/module
+node-object?
+
++purpose/value+
++purpose/call+
+node/regular
+node/purpose
+node/object
+node/object-type
+node/properties
+node/regular?
+make-regular-node
+node/callable?
+node/value?
 node/input-type
 node/output-type
-node/properties
+regular-node/copy
 
-node/value?
-node/primitive?
-node/module?
++direction/input+
++direction/output+
+node/auxiliary
+node/direction
+node/socket-type
+node/auxiliary?
+make-auxiliary-node
 node/input?
 node/output?
-
-node/type
+auxiliary-node/copy
 |#
 
 (in-package #:cl-gp)
 
-;;; *** node kinds ***
+;;; *** abstract node ***
 
-(defconstant +node/value+ :value)
-(defconstant +node/primitive+ :primitive)
-(defconstant +node/module+ :module)
-(defconstant +node/input+ :input)
-(defconstant +node/output+ :output)
+(defclass node/abstract ()
+  ((name :reader node/name
+         :initarg :name
+         :initform nil)
+   (id :reader node/id
+       :initform nil)
+   (module :reader node/module
+           :initform nil)))
 
-;;; *** node ***
+(defmethod initialize-instance :after ((instance node/abstract) &key)
+  (if (alexandria:type= (type-of instance) 'node/abstract)
+      (error "NODE/ABSTRACT -- abstract node cannot be made")))
 
-(defun node~/new (kind name &key (input-type +type/bottom+)
-                              (output-type +type/bottom+)
-                              properties)
-  (cond
-    ((and (eql kind +node/value+)
-        (or (not (type/bottom? input-type))
-           (type/bottom? output-type)))
-     (error "NODE~~/NEW -- node of kind 'value' has incorrect input/output type"))
-    ((and (eql kind +node/input+)
-        (or (not (type/bottom? input-type))
-           (type/bottom? output-type)))
-     (error "NODE~~/NEW -- node of kind 'input' has incorrect input/output type"))
-    ((and (eql kind +node/output+)
-        (or (type/bottom? input-type)
-           (not (type/bottom? output-type))))
-     (error "NODE~~/NEW -- node of kind 'output' has incorrect input/output type")))
-  (list kind name input-type output-type properties))
+(defmethod print-object ((instance node/abstract) st)
+  (print-unreadable-object (instance st)
+    (with-slots (id name) instance
+      (format st "NODE/ABSTRACT: id: ~S, name: ~S" id name))))
 
-(defun node/new-value (name output-type &optional properties)
-  (node~/new +node/value+ name
-             :output-type output-type
-             :properties properties))
+(defun node-object? (object)
+  (typep object 'node/abstract))
 
-(defun node/new-primitive (name input-type output-type &optional properties)
-  (node~/new +node/primitive+ name
-             :input-type input-type
-             :output-type output-type
-             :properties properties))
+;;; *** regular node ***
 
-(defun node/new-module (name input-type output-type &optional properties)
-  (node~/new +node/module+ name
-             :input-type input-type
-             :output-type output-type
-             :properties properties))
+(defconstant +purpose/value+ :value)
+(defconstant +purpose/call+ :call)
 
-(defun node/new-input (name output-type &optional properties)
-  (node~/new +node/input+ name
-             :output-type output-type
-             :properties properties))
+(defclass node/regular (node/abstract)
+  ((purpose :reader node/purpose
+            :initarg :purpose
+            :initform (error "NODE/REGULAR -- :purpose parameter must be supplied"))
+   (object :reader node/object
+           :initarg :object
+           :initform nil)
+   (object-type :reader node/object-type
+                :initarg :type
+                :initform +type/bottom+)
+   (properties :reader node/properties
+               :initarg :properties
+               :initform nil)))
 
-(defun node/new-output (name input-type &optional properties)
-  (node~/new +node/output+ name
-             :input-type input-type
-             :properties properties))
+(defmethod initialize-instance :after ((instance node/regular) &key)
+  (with-slots (purpose object-type) instance
+    (if (typed-value-object? object)
+        (case purpose
+          (+purpose/call+
+           (unless (type/function? object-type)
+             (error "NODE/REGULAR -- 'callable' node must have an object of a function type")))
+          (+purpose/value+ nil)
+          (t (error "NODE/REGULAR -- invalid purpose is specified")))
+        (error "NODE/REGULAR -- invalid object type is specified"))))
 
-(defun node/copy (node)
-  (copy-list node))
+(defmethod print-object ((instance node/regular) st)
+  (print-unreadable-object (instance st)
+    (with-slots (id name purpose object-type) instance
+      (format st "REGULAR-NODE: id: ~S, name: ~S, purpose: ~S, type: ~S"
+              id name purpose object-type))))
 
+(defun node/regular? (object)
+  (typep object 'node/regular))
 
+(defun make-regular-node (name callable? object object-type &optional properties)
+  (make-instance 'node/regular :name name
+                 :purpose (if callable? +purpose/call+ +purpose/value+)
+                 :object object :object-type object-type :properties properties))
 
-(defun node/kind (node)
-  (first node))
-(defun (setf node/kind) (new-value node)
-  (setf (first node) new-value))
-
-(defun node/name (node)
-  (second node))
-(defun (setf node/name) (new-value node)
-  (setf (second node) new-value))
-
-(defun node/input-type (node)
-  (third node))
-(defun (setf node/input-type) (new-value node)
-  (setf (third node) new-value))
-
-(defun node/output-type (node)
-  (fourth node))
-(defun (setf node/output-type) (new-value node)
-  (setf (fourth node) new-value))
-
-(defun node/properties (node)
-  (fifth node))
-(defun (setf node/properties) (new-value node)
-  (setf (fifth node) new-value))
+(defun node/callable? (node)
+  (eql (node/purpose node) +purpose/call+))
 
 (defun node/value? (node)
-  (eql (node/kind node) +node/value+))
+  (eql (node/purpose node) +purpose/value+))
 
-(defun node/primitive? (node)
-  (eql (node/kind node) +node/primitive+))
+(defun node/input-type (node)
+  (if (node/callable? node)
+      (function-type/argument (node/object-type node))
+      +type/bottom+))
 
-(defun node/module? (node)
-  (eql (node/kind node) +node/module+))
+(defun node/output-type (node)
+  (if (node/callable? node)
+      (function-type/result (node/object-type node))
+      (node/object-type node)))
+
+(defun regular-node/copy (node)
+  (make-regular-node (node/name node)
+                     (node/callable? node)
+                     (node/object node)
+                     (node/object-type node)
+                     (node/properties node)))
+
+;;; *** auxiliary (I/O) node ***
+
+(defconstant +direction/input+ :input)
+(defconstant +direction/output+ :output)
+
+(defclass node/auxiliary (node/abstract)
+  ((direction :reader node/direction
+              :initarg :direction
+              :initform (error "NODE/AUXILIARY -- :direction parameter must be supplied"))
+   (socket-type :reader node/socket-type
+                :initarg :type
+                :initform +type/bottom+)))
+
+(defmethod initialize-instance :after ((instance node/auxiliary) &key)
+  (with-slots (direction socket-type) instance
+    (if (type-object? socket-type)
+        (case direction
+          ((+direction/input+ +direction/output+) nil)
+          (t (error "NODE/AUXILIARY -- invalid socket direction is specified")))
+        (error "NODE/AUXILIARY -- invalid socket type is specified"))))
+
+(defmethod print-object ((instance node/auxiliary) st)
+  (print-unreadable-object (instance st)
+    (with-slots (id name direction socket-type) instance
+      (format st "AUXILIARY-NODE: id: ~S, name: ~S, direction ~S, type: ~S"
+              id name direction socket-type))))
+
+(defun node/auxiliary? (object)
+  (typep object 'node/auxiliary))
+
+(defun make-auxiliary-node (name direction socket-type)
+  (make-instance 'node/auxiliary :name name
+                 :direction direction :socket-type socket-type))
 
 (defun node/input? (node)
-  (eql (node/kind node) +node/input+))
+  (eql (node/direction node) +direction/input+))
 
 (defun node/output? (node)
-  (eql (node/kind node) +node/output+))
+  (eql (node/direction node) +direction/output+))
 
-(defun node/type (node)
-  (cond
-    ((node/value? node) (node/output-type node))
-    ((or (node/primitive? node)
-        (node/module? node))
-     (function-type/new (node/input-type node)
-                        (node/output-type node)))
-    (t +type/bottom+)))
+(defun auxiliary-node/copy (node)
+  (make-auxiliary-node (node/name node)
+                       (node/direction node)
+                       (node/socket-type node)))
