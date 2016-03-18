@@ -1,77 +1,6 @@
 ;;;; type.lisp
 
-;;; Public symbols of the file:
-#|
-type/abstract
-type/value-test=
-
-type-object?
-type/kind
-type-of-kind?
-kind=
-
-*type/name-test*
-
-type/class
-type-class/name
-type-class/type-test
-make-type-class
-type/class?
-
-type/top
-type/top?
-+type/top+
-
-type/void
-type/void?
-+type/void+
-
-type/bottom
-type/bottom?
-+type/bottom+
-
-type/parametric
-parametric-type/name
-parametric-type/arguments
-make-parametric-type
-type/parametric?
-
-type/primitive
-primitive-type/name
-make-primitive-type
-type/primitive?
-
-*field/name-test*
-field
-field/name
-field/type
-make-field
-
-type/record
-record/fields
-make-record
-type/record?
-record/nested-search
-
-type/function
-function-type/argument
-function-type/result
-make-function-type
-type/function?
-
-typed-value
-typed-value/value
-typed-value/type
-make-typed-value
-typed-value-object?
-typed-value/equal?
-
-object/compatible?
-|#
-
 (in-package #:cl-gp)
-
-
 
 (defclass type/abstract ()
   ((test= :reader type/value-test=
@@ -79,6 +8,9 @@ object/compatible?
           :initform (constantly nil))))
 
 (defmethod initialize-instance :after ((instance type/abstract) &key)
+  (with-slots (test=) instance
+    (unless (functionp test=)
+      (error "TYPE -- test= must be a function")))
   (if (alexandria:type= (type-of instance) 'type/abstract)
       (error "TYPE/ABSTRACT -- abstract type cannot be made")))
 
@@ -108,7 +40,7 @@ object/compatible?
 
 
 
-(defvar *type/name-test* #'eql)
+(defparameter *type/name-test* #'eql)
 
 ;;; *** type class ***
 
@@ -218,7 +150,7 @@ object/compatible?
 
 ;;; *** field&record ***
 
-(defvar *field/name-test* #'eql)
+(defparameter *field/name-test* #'eql)
 
 (defclass field ()
   ((name :reader field/name
@@ -249,7 +181,7 @@ object/compatible?
 (defmethod print-object ((instance type/record) st)
   (print-unreadable-object (instance st)
     (with-slots (fields) instance
-      (format st "RECORD: ~S fields: ~S" (length fields) fields))))
+      (format st "RECORD: ~S" fields))))
 
 (defun make-record (fields-list &optional (test= #'equalp))
   (case (length fields-list)
@@ -342,13 +274,13 @@ object/compatible?
          (funcall (type/value-test= (typed-value/type val2))
                   (typed-value/value val1) (typed-value/value val2)))))
 
-;;; *** object compatibility test ***
+;;; *** type compatibility test ***
 
-(defun object/compatible? (obj1 obj2)
+(defun type/compatible? (obj1 obj2)
   (cond
     ((and (typed-value-object? obj1) (typed-value-object? obj2))
-     (and (object/compatible? (typed-value/type obj1)
-                            (typed-value/type obj2))
+     (and (type/compatible? (typed-value/type obj1)
+                          (typed-value/type obj2))
         (typed-value/equal? obj1 obj2)))
     ((not (and (type-object? obj1) (type-object? obj2))) nil)
     ((and (type-of-kind? obj1 'type/class)
@@ -368,7 +300,7 @@ object/compatible?
                  (parametric-type/name obj2))
         (= (length (parametric-type/arguments obj1))
            (length (parametric-type/arguments obj2)))
-        (every #'object/compatible?
+        (every #'type/compatible?
            (parametric-type/arguments obj1)
            (parametric-type/arguments obj2))))
     ((and (type-of-kind? obj1 'type/record)
@@ -382,11 +314,41 @@ object/compatible?
                                   (and (funcall *field/name-test*
                                               (field/name field1)
                                               (field/name field2))
-                                     (object/compatible? (field/type field1)
-                                                         (field/type field2)))))))
+                                     (type/compatible? (field/type field1)
+                                                       (field/type field2)))))))
     ((and (type-of-kind? obj1 'type/function)
         (type-of-kind? obj2 'type/function))
-     (and (object/compatible? (function-type/argument obj1)
-                            (function-type/argument obj2))
-        (object/compatible? (function-type/result obj1)
-                            (function-type/result obj2))))))
+     (and (type/compatible? (function-type/argument obj1)
+                          (function-type/argument obj2))
+        (type/compatible? (function-type/result obj1)
+                          (function-type/result obj2))))))
+
+;;; *** node type data ***
+
+(defun node/type (node)
+  (getf (node/properties node) :type))
+
+(defun node/input-type (node)
+  (if (node/call? node)
+      (function-type/argument (node/type node))
+      +type/bottom+))
+
+(defun node/output-type (node)
+  (if (node/call? node)
+      (function-type/result (node/type node))
+      (node/type node)))
+
+;;; *** selector for type constraint ***
+
+(defun make-type-selector (...)
+  ...)
+
+;;; *** type constraint ***
+
+(defparameter *type-constraint*
+  #'(lambda (source-node target-node arrow graph)
+      (declare (ignore graph))
+      (type/compatible? (record/nested-search (node/type source-node)
+                                              (arrow/source-selector arrow))
+                        (record/nested-search (node/type target-node)
+                                              (arrow/target-selector arrow)))))

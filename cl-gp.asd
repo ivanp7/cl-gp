@@ -7,10 +7,12 @@
   :depends-on (#:alexandria
                #:cl-graph
                #:iterate)
-  :serial t
   :components ((:file "package")
-               (:file "type")
-               (:file "node")
-               (:file "module")
-               (:file "interpreter")
-               (:file "cl-gp")))
+               (:file "properties" :depends-on ("package"))
+               (:file "node" :depends-on ("properties"))
+               (:file "connection" :depends-on ("node"))
+               (:file "constraint" :depends-on ("package"))
+               (:file "module" :depends-on ("properties" "node" "connection" "constraint"))
+               (:file "type" :depends-on ("node" "constraint"))
+               (:file "interpreter" :depends-on ("module" "type"))
+               (:file "cl-gp" :depends-on ("constraint" "module" "interpreter"))))
