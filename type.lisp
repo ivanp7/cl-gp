@@ -338,10 +338,13 @@
       (function-type/result (node/type node))
       (node/type node)))
 
-;;; *** selector for type constraint ***
+;;; *** arrow type selector ***
 
-(defun make-type-selector (...)
-  ...)
+(defun arrow/source-selector (arrow)
+  (getf (arrow/properties arrow) :source-selector))
+
+(defun arrow/target-selector (arrow)
+  (getf (arrow/properties arrow) :target-selector))
 
 ;;; *** type constraint ***
 

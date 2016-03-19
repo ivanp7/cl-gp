@@ -28,7 +28,7 @@
 
 
 
-(defun make-genotype-graph (&optional nodes connections)
+(defun graph/make-graph (&optional nodes connections)
   (let ((graph (make-graph 'graph-container :default-edge-type :directed)))
     (dolist (node nodes)
       (graph/add-node! graph node))
@@ -58,12 +58,15 @@
 (defun graph/add-node! (graph node)
   (if node
       (let ((vertex (~graph/vertex graph (node/id node))))
-        (if (null vertex)
-            (add-vertex graph node)))))
+        (when (null vertex)
+          (add-vertex graph node)
+          t))))
 
 (defun graph/delete-node! (graph id)
   (let ((vertex (~graph/vertex graph id)))
-    (if vertex (delete-vertex graph vertex))))
+    (when vertex
+      (delete-vertex graph vertex)
+      t)))
 
 (defun graph/delete-nodes! (graph ids)
   (iterate:iter (for id in ids)
@@ -175,14 +178,15 @@
   (multiple-value-bind (edge src-vertex tgt-vertex)
       (~graph/edge graph (connection/source-id connection)
                    (connection/target-id connection))
-    (if (and (and src-vertex tgt-vertex)
-           (funcall constraints-cf (element src-vertex) (element tgt-vertex)
-                    (connection/arrow connection) graph))
-        (if (null edge)
-            (add-edge-between-vertexes graph src-vertex tgt-vertex
-                                       :value (list (connection/arrow connection)))
-            (pushnew (connection/arrow connection) (element edge)
-                     :test #'arrow-equal)))))
+    (when (and (and src-vertex tgt-vertex)
+             (funcall constraints-cf (element src-vertex) (element tgt-vertex)
+                      (connection/arrow connection) graph))
+      (if (null edge)
+          (add-edge-between-vertexes graph src-vertex tgt-vertex
+                                     :value (list (connection/arrow connection)))
+          (pushnew (connection/arrow connection) (element edge)
+                   :test #'arrow-equal))
+      t)))
 
 (defun graph/disconnect! (graph connection)
   (let ((edge (~graph/edge graph (connection/source-id connection)
@@ -202,21 +206,21 @@
 
 (defun graph/copy-graph (graph &key (except-world-node *graph/hide-world*))
   (let* ((nodes
-          (mapcar #'copy-genotype-node
+          (mapcar #'copy-node
                   (graph/all-nodes graph
                                    :except-world-node except-world-node)))
          (connections
           (mapcar #'copy-connection
                   (graph/all-connections graph
                                          :except-world-connections except-world-node))))
-    (make-genotype-graph nodes connections)))
+    (graph/make-graph nodes connections)))
 
 (defun graph/copy-subgraph (graph ids)
   (let* ((nodes (mapcar #'copy-genotype-node (graph/nodes graph ids)))
          (existing-ids (mapcar #'node/id nodes))
          (connections (mapcar #'copy-connection
                               (graph/internal-connections graph existing-ids))))
-    (make-genotype-graph nodes connections)))
+    (graph/make-graph nodes connections)))
 
 (defun graph/insert-subgraph! (graph subgraph)
   (let ((common-nodes-ids (mapcar #'node/id
@@ -250,11 +254,11 @@
 
 ;;; *** module ***
 
-(defclass genotype/module ()
+(defclass object/module ()
   ((graph :reader module/graph
           :initarg :graph
-          :initform (make-genotype-graph
-                     (list (make-genotype-node *external-world-node-id*))))
+          :initform (graph/make-graph
+                     (list (make-node *external-world-node-id*))))
    (properties :reader module/properties
                :initarg :properties
                :initform nil)
@@ -262,18 +266,23 @@
                    :initarg :print-function
                    :initform (constantly ""))))
 
-(defmethod print-object ((instance genotype/module) st)
+(defmethod print-object ((instance object/module) st)
   (print-unreadable-object (instance st :identity t)
     (with-slots (properties print-function) instance
       (format st "MODULE ~A" (funcall print-function properties)))))
 
-(defun make-genotype-module (&key properties (print-function (constantly "")))
-  (make-instance 'genotype/module
+(defun make-module (&optional properties (print-function (constantly "")))
+  (make-instance 'object/module
                  :properties properties
                  :print-function print-function))
 
-(defun copy-genotype-module (module)
-  (make-instance 'genotype/module
+(defun copy-module (module)
+  (make-instance 'object/module
                  :graph (copy-graph (module/graph module))
                  :properties (funcall *properties-copy-function* (module/properties module))
                  :print-function (module/print-function module)))
+
+(defun module/ensure-world-node-existence! (module)
+  (if (null (graph/node (module/graph module) *external-world-node-id*))
+      (graph/add-node! (module/graph module)
+                       (make-node *external-world-node-id*))))
