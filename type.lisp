@@ -276,7 +276,20 @@
 
 ;;; *** type compatibility test ***
 
-(defun type/compatible? (obj1 obj2)
+(defun type/compatible? (source-type target-type)
+
+
+
+
+
+  !!!FIX!!!
+
+
+
+
+
+
+
   (cond
     ((and (typed-value-object? obj1) (typed-value-object? obj2))
      (and (type/compatible? (typed-value/type obj1)
@@ -338,6 +351,18 @@
       (function-type/result (node/type node))
       (node/type node)))
 
+(defparameter *type-constraint/node-print-function*
+  #'(lambda (plist)
+      (format nil "(~S -> ~S)"
+              (getf plist :input-type)
+              (getf plist :output-type))))
+
+(defparameter *type-constraint/world-node-print-function*
+  #'(lambda (plist)
+      (format nil "(~S <- ~S)"
+              (getf plist :output-type)
+              (getf plist :input-type))))
+
 ;;; *** arrow type selector ***
 
 (defun arrow/source-selector (arrow)
@@ -346,9 +371,23 @@
 (defun arrow/target-selector (arrow)
   (getf (arrow/properties arrow) :target-selector))
 
+(defparameter *type-constraint/arrow-print-function*
+  #'(lambda (plist)
+      (format nil "(~S -> ~S)"
+              (getf plist :input-selector)
+              (getf plist :output-selector))))
+
+;;; *** module print function ***
+
+(defparameter *type-constraint/module-print-function*
+  #'(lambda (plist)
+      (format nil "(~S -> ~S)"
+              (getf plist :input-type)
+              (getf plist :output-type))))
+
 ;;; *** type constraint ***
 
-(defparameter *type-constraint*
+(defparameter *type-constraint-function*
   #'(lambda (source-node target-node arrow graph)
       (declare (ignore graph))
       (type/compatible? (record/nested-search (node/type source-node)

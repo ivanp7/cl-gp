@@ -8,7 +8,36 @@
     (* n (factorial (- n 1))))
 |#
 
-(defparameter *factorial* (module/new 'factorial))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; реализовать список печатающих функций и их комбинацию
+
+(defparameter *integer-type* (make-primitive-type 'integer))
+(defparameter *greater-integer-type* (make-primitive-type 'greater-integer))
+
+(setf *module/print-functions-list*
+   (list *name-print-function*
+         (constantly " : ")
+         *type-constraint/module-print-function*))
+
+(setf *node/print-function*
+   (list *name-print-function*
+         (constantly " : ")
+         *type-constraint/node-print-function*))
+
+(defparameter *world-node/print-function*
+  (list *type-constraint/world-node-print-function*))
+
+(defparameter *arrow/print-function*
+  (list *type-constraint/arrow-print-function*))
+
+(defparameter *factorial*
+  (make-module :properties (make-properties :name 'factorial
+                                            :input-type *integer-type*
+                                            :output-type *greater-integer-type*)
+               :world-node-properties (make-properties :output-type *integer-type*
+                                                       :input-type *greater-integer-type*)))
+
+
+
 
 (print (module/add-node! *factorial* (node/new-input 'n 'integer))) ; 1
 (print (module/add-node! *factorial* (node/new-output 'factorial 'integer))) ; 2

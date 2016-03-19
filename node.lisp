@@ -9,6 +9,8 @@
 (defun id-equal (id1 id2)
   (funcall *node/id-test* id1 id2))
 
+(defparameter *node/print-functions-list* nil)
+
 (defclass object/node ()
   ((id :reader node/id
        :initarg :id)
@@ -24,10 +26,8 @@
     (with-slots (id properties print-function) instance
       (format st "NODE#~S ~A" id (funcall print-function properties)))))
 
-(defun node-object? (object)
-  (typep object 'object/node))
-
-(defun make-node (id &optional properties (print-function (constantly "")))
+(defun make-node (id &key properties (print-function (make-conjoint-print-function
+                                                      *node/print-functions-list*)))
   (make-instance 'object/node
                  :id id :properties properties
                  :print-function print-function))
@@ -53,9 +53,6 @@
         :behaviour behaviour
         :type type
         :object object))
-
-(defun node/name (node)
-  (getf (node/properties node) :name))
 
 (defun node/behaviour (node)
   (getf (node/properties node) :behaviour))

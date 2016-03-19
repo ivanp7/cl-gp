@@ -4,7 +4,7 @@
 
 ;;; *** graph ***
 
-(defparameter *external-world-node-id* :external-world)
+(defparameter *world-node-id* :external-world)
 
 (defparameter *graph/hide-world* nil)
 
@@ -43,7 +43,7 @@
         nodes
         (delete-if #'(lambda (node)
                        (id-equal (node/id node)
-                                 *external-world-node-id*))
+                                 *world-node-id*))
                    nodes))))
 
 (defun graph/node (graph id)
@@ -91,9 +91,9 @@
                       ,connections
                       (delete-if #'(lambda (,conn)
                                      (or (id-equal (connection/source-id ,conn)
-                                                  *external-world-node-id*)
+                                                  *world-node-id*)
                                         (id-equal (connection/target-id ,conn)
-                                                  *external-world-node-id*)))
+                                                  *world-node-id*)))
                                  ,connections))))))
 
   (defun graph/input-connections (graph target-ids &key (except-world-connections
@@ -254,11 +254,13 @@
 
 ;;; *** module ***
 
+(defparameter *module/print-functions-list* nil)
+(defparameter *world-node/print-functions-list* nil)
+
 (defclass object/module ()
   ((graph :reader module/graph
           :initarg :graph
-          :initform (graph/make-graph
-                     (list (make-node *external-world-node-id*))))
+          :initform (error "OBJECT/MODULE -- :graph parameter must be supplied"))
    (properties :reader module/properties
                :initarg :properties
                :initform nil)
@@ -271,8 +273,16 @@
     (with-slots (properties print-function) instance
       (format st "MODULE ~A" (funcall print-function properties)))))
 
-(defun make-module (&optional properties (print-function (constantly "")))
+(defun make-module (&key properties (print-function (make-conjoint-print-function
+                                                     *module/print-functions-list*))
+                      world-node-properties
+                      (world-node-print-function (make-conjoint-print-function
+                                                  *world-node/print-functions-list*)))
   (make-instance 'object/module
+                 :graph (graph/make-graph
+                         (list (make-node *world-node-id*
+                                          :properties world-node-properties
+                                          :print-function world-node-print-function)))
                  :properties properties
                  :print-function print-function))
 
@@ -282,7 +292,12 @@
                  :properties (funcall *properties-copy-function* (module/properties module))
                  :print-function (module/print-function module)))
 
-(defun module/ensure-world-node-existence! (module)
-  (if (null (graph/node (module/graph module) *external-world-node-id*))
+(defun module/ensure-world-node-existence! (module &key world-node-properties
+                                                     (world-node-print-function
+                                                      (make-conjoint-print-function
+                                                       *world-node/print-functions-list*)))
+  (if (null (graph/node (module/graph module) *world-node-id*))
       (graph/add-node! (module/graph module)
-                       (make-node *external-world-node-id*))))
+                       (make-node *world-node-id*
+                                  :properties world-node-properties
+                                  :print-function world-node-print-function))))

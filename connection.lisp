@@ -6,6 +6,8 @@
 
 (defparameter *arrow/test* #'equal)
 
+(defparameter *arrow/print-functions-list* nil)
+
 (defclass object/arrow ()
   ((properties :reader arrow/properties
                :initarg :properties
@@ -19,7 +21,8 @@
     (with-slots (properties print-function) instance
       (format st "ARROW ~A" (funcall print-function properties)))))
 
-(defun make-arrow (&optional properties (print-function (constantly "")))
+(defun make-arrow (&key properties (print-function (make-conjoint-print-function
+                                                    *arrow/print-functions-list*)))
   (make-instance 'object/arrow
                  :properties properties
                  :print-function print-function))
