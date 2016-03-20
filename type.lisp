@@ -2,26 +2,30 @@
 
 (in-package #:cl-gp)
 
-(defclass type/abstract ()
-  ((test= :reader type/value-test=
-          :initarg :test=
-          :initform (constantly nil))))
+(defparameter *type/name-test* #'eql)
 
-(defmethod initialize-instance :after ((instance type/abstract) &key)
-  (with-slots (test=) instance
-    (unless (functionp test=)
-      (error "TYPE -- test= must be a function")))
-  (if (alexandria:type= (type-of instance) 'type/abstract)
-      (error "TYPE/ABSTRACT -- abstract type cannot be made")))
-
-(defmethod print-object ((instance type/abstract) st)
-  (print-unreadable-object (instance st)
-    (format st "TYPE/ABSTRACT")))
-
-
+(defclass abstract-type ()
+  ((name :reader type/name
+         :initarg :name
+         :initform nil)))
+#|
+(defmethod initialize-instance :after ((instance abstract-type) &key)
+  (if (alexandria:type= (type-of instance) 'abstract-type)
+      (error "Abstract type object cannot be created")))
+|#
+(defmethod print-object ((instance abstract-type) st)
+  (print-unreadable-object (instance st :identity t)
+    (with-slots (name) instance
+      (format st "ABSTRACT-TYPE ~S" name))))
 
 (defun type-object? (object)
-  (typep object 'type/abstract))
+  (typep object 'abstract-type))
+
+(defgeneric type/reducible? (source-type target-type)
+  (:documentation "Test if source-type can be reduced to target-type"))
+
+(defmethod type/reducible? ((source-type abstract-type) (target-type abstract-type))
+  (funcall *type/name-test* (type/name source-type) (type/name target-type)))
 
 (defun type/kind (object)
   (type-of object))
@@ -29,126 +33,165 @@
 (defun type-of-kind? (type kind)
   (typep type kind))
 
-(defmacro kind= (k1 k2)
-  `(alexandria:type= ,k1 ,k2))
-
 (defmacro define-type-constant (constant-name kind &rest args)
   `(alexandria:define-constant ,constant-name (make-instance ',kind ,@args)
      :test #'(lambda (val1 val2)
-               (kind= (type/kind val1)
-                      (type/kind val2)))))
-
-
-
-(defparameter *type/name-test* #'eql)
-
-;;; *** type class ***
-
-(defclass type/class (type/abstract)
-  ((name :reader type-class/name
-         :initarg :name
-         :initform (error "TYPE/CLASS -- :name parameter must be supplied"))
-   (type-test :reader type-class/type-test
-              :initarg :type-test
-              :initform (error "TYPE/CLASS -- :type-test parameter must be supplied"))))
-
-(defmethod print-object ((instance type/class) st)
-  (print-unreadable-object (instance st)
-    (with-slots (name) instance
-      (format st "TYPE-CLASS: ~S" name))))
-
-(defun make-type-class (name type-test)
-  (make-instance 'type/class :name name :type-test type-test))
-
-(defun type/class? (type)
-  (typep type 'type/class))
+               (alexandria:type= (type/kind val1)
+                                 (type/kind val2)))))
 
 ;;; *** top type ***
 
-(defclass type/top (type/class)
-  ((name :initform 'top-type-class)
-   (type-test :initform (constantly t))))
+(defclass top-type (abstract-type)
+  ())
+
+(defmethod print-object ((instance top-type) st)
+  (print-unreadable-object (instance st :identity t)
+    (format st "TOP-TYPE")))
 
 (defun type/top? (type)
-  (typep type 'type/top))
+  (typep type 'top-type))
 
-(define-type-constant +type/top+ type/top)
+(defmethod type/reducible? ((source-type abstract-type) (target-type top-type))
+  t)
+
+(define-type-constant +top-type+ top-type)
 
 ;;; *** void type ***
 
-(declaim (ftype function type/void?))
+(defclass void-type (abstract-type)
+  ())
 
-(defclass type/void (type/class)
-  ((name :initform 'void-type-class)
-   (type-test :initform #'type/void?)))
+(defmethod print-object ((instance void-type) st)
+  (print-unreadable-object (instance st :identity t)
+    (format st "VOID-TYPE")))
 
 (defun type/void? (type)
-  (typep type 'type/void))
+  (typep type 'void-type))
 
-(define-type-constant +type/void+ type/void)
+(defmethod type/reducible? ((source-type abstract-type) (target-type void-type))
+  (type/void? source-type))
+
+(define-type-constant +void-type+ void-type)
 
 ;;; *** bottom type ***
 
-(defclass type/bottom (type/class)
-  ((name :initform 'bottom-type-class)
-   (type-test :initform (constantly nil))))
+(defclass bottom-type (abstract-type)
+  ())
+
+(defmethod print-object ((instance bottom-type) st)
+  (print-unreadable-object (instance st :identity t)
+    (format st "BOTTOM-TYPE")))
 
 (defun type/bottom? (type)
-  (typep type 'type/bottom))
+  (typep type 'bottom-type))
 
-(define-type-constant +type/bottom+ type/bottom)
+(defmethod type/reducible? ((source-type abstract-type) (target-type bottom-type))
+  nil)
+
+(define-type-constant +bottom-type+ bottom-type)
+
+;;; *** typed value ***
+
+(defclass typed-value ()
+  ((value :accessor typed-value/value
+          :initarg :value
+          :initform nil)
+   (value-type :reader typed-value/type
+               :initarg :type
+               :initform +top-type+)))
+
+(defmethod print-object ((instance typed-value) st)
+  (print-unreadable-object (instance st)
+    (with-slots (value value-type) instance
+      (format st "VALUE ~S ~S" value value-type))))
+
+(defun make-typed-value (value value-type)
+  (make-instance 'typed-value :value value :type value-type))
+
+(defun typed-value-object? (object)
+  (typep object 'typed-value))
+
+
+
+(defgeneric type/value-reducible? (source-value source-type target-value target-type)
+  (:documentation "Test if source-value of source-type can be reduced to target-value of target-type"))
+
+(defmethod type/value-reducible? (source-value (source-type abstract-type)
+                                  target-value (target-type abstract-type))
+  (declare (ignore source-type target-type))
+  (equalp source-value target-value))
+
+(defun typed-value/reducible? (source-typed-value target-typed-value)
+  (if (type/reducible? (typed-value/type source-typed-value)
+                       (typed-value/type target-typed-value))
+      (type/value-reducible? (typed-value/value source-typed-value)
+                             (typed-value/type source-typed-value)
+                             (typed-value/value target-typed-value)
+                             (typed-value/type target-typed-value))))
 
 ;;; *** parametric type ***
 
-(defclass type/parametric (type/abstract)
-  ((name :reader parametric-type/name
-         :initarg :name
-         :initform (error "TYPE/PARAMETRIC -- :name parameter must be supplied"))
-   (arguments :initarg :arguments
-              :initform (error "TYPE/PARAMETRIC -- :arguments parameter must be supplied"))))
+(defclass parametric-type (abstract-type)
+  ((arguments :reader parametric-type/arguments
+              :initarg :arguments
+              :initform (error "PARAMETRIC-TYPE -- :arguments parameter must be supplied"))))
 
-(defmethod initialize-instance :after ((instance type/parametric) &key)
-  (with-slots (arguments) instance
-    (setf arguments (copy-list arguments))))
-
-(defmethod print-object ((instance type/parametric) st)
+(defmethod print-object ((instance parametric-type) st)
   (print-unreadable-object (instance st)
     (with-slots (name arguments) instance
-      (format st "PARAMETRIC-TYPE: ~S of ~S" name arguments))))
+      (format st "PARAMETRIC-TYPE ~S ~S" name arguments))))
 
 (declaim (ftype function make-primitive-type))
 
-(defun make-parametric-type (name arguments-list &optional (test= #'equalp))
+(defun make-parametric-type (name arguments-list)
   (if (zerop (length arguments-list))
-      (make-primitive-type name test=)
-      (make-instance 'type/parametric :name name :arguments arguments-list :test= test=)))
-
-(defun parametric-type/arguments (parametric)
-  (with-slots (arguments) parametric
-    (copy-list arguments)))
+      (make-primitive-type name)
+      (if (every #'(lambda (arg)
+                 (or (type-object? arg)
+                    (typed-value-object? arg)))
+             arguments-list)
+          (make-instance 'parametric-type :name name :arguments arguments-list))))
 
 (defun type/parametric? (type)
-  (typep type 'type/parametric))
+  (typep type 'parametric-type))
+
+(defmethod type/reducible? ((source-type abstract-type) (target-type parametric-type))
+  (and (type/parametric? source-type)
+     (funcall *type/name-test* (type/name source-type) (type/name target-type))
+     (= (length (parametric-type/arguments source-type))
+        (length (parametric-type/arguments target-type)))
+     (every #'(lambda (source-arg target-arg)
+            (cond
+              ((and (type-object? source-arg)
+                  (type-object? target-arg))
+               (type/reducible? source-arg target-arg))
+              ((and (typed-value-object? source-arg)
+                  (typed-value-object? target-arg))
+               (typed-value/reducible? source-arg target-arg))))
+        (parametric-type/arguments source-type)
+        (parametric-type/arguments target-type))))
 
 ;;; *** primitive type ***
 
-(defclass type/primitive (type/parametric)
-  ((name :reader primitive-type/name
-         :initform (error "TYPE/PRIMITIVE -- :name parameter must be supplied"))
-   (arguments :initform nil)))
+(defclass primitive-type (parametric-type)
+  ((arguments :initform nil)))
 
-(defmethod print-object ((instance type/primitive) st)
+(defmethod print-object ((instance primitive-type) st)
   (print-unreadable-object (instance st)
     (with-slots (name) instance
-      (format st "PRIMITIVE-TYPE: ~S" name))))
+      (format st "PRIMITIVE-TYPE ~S" name))))
 
-(defun make-primitive-type (name &optional (test= #'equalp))
-  (make-instance 'type/primitive :name name :test= test=))
+(defun make-primitive-type (name)
+  (make-instance 'type/primitive :name name))
 
 (defun type/primitive? (type)
-  (typep type 'type/primitive))
+  (typep type 'primitive-type))
 
-;;; *** field&record ***
+(defmethod type/reducible? ((source-type abstract-type) (target-type primitive-type))
+  (and (type/primitive? source-type)
+     (funcall *type/name-test* (type/name source-type) (type/name target-type))))
+
+;;; *** record ***
 
 (defparameter *field/name-test* #'eql)
 
@@ -163,27 +206,24 @@
 (defmethod print-object ((instance field) st)
   (print-unreadable-object (instance st)
     (with-slots (name type) instance
-      (format st "FIELD ~S as ~S" name type))))
+      (format st "FIELD ~S : ~S" name type))))
 
 (defun make-field (name type)
   (make-instance 'field :name name :type type))
 
 
 
-(defclass type/record (type/abstract)
-  ((fields :initarg :fields
-           :initform (error "TYPE/RECORD -- :fields parameter must be supplied"))))
+(defclass record (abstract-type)
+  ((fields :reader record/fields
+           :initarg :fields
+           :initform (error "RECORD -- :fields parameter must be supplied"))))
 
-(defmethod initialize-instance :after ((instance type/record) &key)
-  (with-slots (fields) instance
-    (setf fields (copy-list fields))))
-
-(defmethod print-object ((instance type/record) st)
+(defmethod print-object ((instance record) st)
   (print-unreadable-object (instance st)
     (with-slots (fields) instance
-      (format st "RECORD: ~S" fields))))
+      (format st "RECORD ~S" fields))))
 
-(defun make-record (fields-list &optional (test= #'equalp))
+(defun make-record (fields-list)
   (case (length fields-list)
     (0 +type/bottom+)
     (1 (field/type (first fields-list)))
@@ -191,150 +231,66 @@
               (length (remove-duplicates fields-list
                                          :key #'field/name
                                          :test *field/name-test*)))
-           (make-instance 'type/record :fields fields-list :test= test=)
+           (make-instance 'record :fields fields-list)
            (error "MAKE-RECORD -- record cannot have fields with identical names")))))
 
-(defun record/fields (record)
-  (with-slots (fields) record
-    (copy-list fields)))
-
 (defun type/record? (type)
-  (typep type 'type/record))
+  (typep type 'record))
 
 (defun record/nested-search (type fields-names-list)
   (if (null fields-names-list)
       type
       (if (type/record? type)
           (with-slots (fields) type
-            (let ((field (find (car fields-names-list) fields
+            (let ((field (find (first fields-names-list) fields
                                :key #'field/name :test *field/name-test*)))
               (if field
                   (record/nested-search
-                   (field/type field) (cdr fields-names-list))
+                   (field/type field) (rest fields-names-list))
                   +type/bottom+)))
           +type/bottom+)))
 
+(defmethod type/reducible? ((source-type abstract-type) (target-type record))
+  (and (type/record? source-type)
+     (and (= (length (record/fields source-type))
+           (length (record/fields target-type)))
+        (every #'(lambda (target-field)
+               (find-if #'(lambda (source-field)
+                            (and (funcall *field/name-test*
+                                        (field/name source-field)
+                                        (field/name target-field))
+                               (type/reducible? (field/type source-field)
+                                                (field/type target-field))))
+                        (record/fields source-type)))
+           (record/fields target-type)))))
+
 ;;; *** function type ***
 
-(defclass type/function (type/abstract)
+(defclass function-type (abstract-type)
   ((argument :reader function-type/argument
              :initarg :argument
-             :initform (error "TYPE/FUNCTION -- :argument parameter must be supplied"))
+             :initform (error "FUNCTION-TYPE -- :argument parameter must be supplied"))
    (result :reader function-type/result
            :initarg :result
-           :initform (error "TYPE/FUNCTION -- :result parameter must be supplied"))))
+           :initform (error "FUNCTION-TYPE -- :result parameter must be supplied"))))
 
-(defmethod print-object ((instance type/function) st)
+(defmethod print-object ((instance function-type) st)
   (print-unreadable-object (instance st)
     (with-slots (argument result) instance
-      (format st "FUNCTION-TYPE: ~S -> ~S" argument result))))
+      (format st "FUNCTION-TYPE (~S -> ~S)" argument result))))
 
-(defun make-function-type (argument result &optional (test= #'equalp))
-  (make-instance 'type/function :argument argument :result result :test= test=))
+(defun make-function-type (argument result)
+  (make-instance 'function-type :argument argument :result result))
 
 (defun type/function? (type)
-  (typep type 'type/function))
+  (typep type 'function-type))
 
-;;; *** typed value ***
-
-(defclass typed-value ()
-  ((object :accessor typed-value/value
-           :initarg :value
-           :initform nil)
-   (object-type :reader typed-value/type
-                :initarg :type
-                :initform +type/bottom+)))
-
-(defmethod initialize-instance :after ((instance typed-value) &key)
-  (with-slots (object-type) instance
-    (cond
-      ((not (type-object? object-type))
-       (error "TYPED-VALUE -- invalid object type is specified"))
-      ((type/class? object-type)
-       (error "TYPED-VALUE -- cannot create object of a type class")))))
-
-(defmethod print-object ((instance typed-value) st)
-  (print-unreadable-object (instance st)
-    (with-slots (object object-type) instance
-      (format st "VALUE: ~S as ~S" object object-type))))
-
-(defun make-typed-value (object object-type)
-  (make-instance 'typed-value :value object :type object-type))
-
-(defun typed-value-object? (object)
-  (typep object 'typed-value))
-
-(defun typed-value/equal? (val1 val2)
-  (if (eql (type/value-test= (typed-value/type val1))
-           (type/value-test= (typed-value/type val2)))
-      (funcall (type/value-test= (typed-value/type val1))
-               (typed-value/value val1) (typed-value/value val2))
-      (or (funcall (type/value-test= (typed-value/type val1))
-                  (typed-value/value val1) (typed-value/value val2))
-         (funcall (type/value-test= (typed-value/type val2))
-                  (typed-value/value val1) (typed-value/value val2)))))
-
-;;; *** type compatibility test ***
-
-(defun type/compatible? (source-type target-type)
-
-
-
-
-
-  !!!FIX!!!
-
-
-
-
-
-
-
-  (cond
-    ((and (typed-value-object? obj1) (typed-value-object? obj2))
-     (and (type/compatible? (typed-value/type obj1)
-                          (typed-value/type obj2))
-        (typed-value/equal? obj1 obj2)))
-    ((not (and (type-object? obj1) (type-object? obj2))) nil)
-    ((and (type-of-kind? obj1 'type/class)
-        (type-of-kind? obj2 'type/class))
-     (and (not (type/bottom? obj1)) (not (type/bottom? obj2))
-        (funcall *type/name-test* (type-class/name obj1) (type-class/name obj2))
-        (eql (type-class/type-test obj1) (type-class/type-test obj2))))
-    ((or (type-of-kind? obj1 'type/class)
-        (type-of-kind? obj2 'type/class))
-     (if (type-of-kind? obj1 'type/class)
-         (funcall (type-class/type-test obj1) obj2)
-         (funcall (type-class/type-test obj2) obj1)))
-    ((and (type-of-kind? obj1 'type/parametric)
-        (type-of-kind? obj2 'type/parametric))
-     (and (funcall *type/name-test*
-                 (parametric-type/name obj1)
-                 (parametric-type/name obj2))
-        (= (length (parametric-type/arguments obj1))
-           (length (parametric-type/arguments obj2)))
-        (every #'type/compatible?
-           (parametric-type/arguments obj1)
-           (parametric-type/arguments obj2))))
-    ((and (type-of-kind? obj1 'type/record)
-        (type-of-kind? obj2 'type/record))
-     (and (= (length (record/fields obj1))
-           (length (record/fields obj2)))
-        (alexandria:set-equal (record/fields obj1)
-                              (record/fields obj2)
-                              :test
-                              #'(lambda (field1 field2)
-                                  (and (funcall *field/name-test*
-                                              (field/name field1)
-                                              (field/name field2))
-                                     (type/compatible? (field/type field1)
-                                                       (field/type field2)))))))
-    ((and (type-of-kind? obj1 'type/function)
-        (type-of-kind? obj2 'type/function))
-     (and (type/compatible? (function-type/argument obj1)
-                          (function-type/argument obj2))
-        (type/compatible? (function-type/result obj1)
-                          (function-type/result obj2))))))
+(defmethod type/reducible? ((source-type abstract-type) (target-type function-type))
+  (and (type/function? source-type)
+     (type/reducible? (function-type/argument source-type)
+                      (function-type/argument target-type))
+     (type/reducible? (function-type/result source-type)
+                      (function-type/result target-type))))
 
 ;;; *** node type data ***
 
@@ -351,6 +307,26 @@
       (function-type/result (node/type node))
       (node/type node)))
 
+;;; *** arrow type selector ***
+
+(defun arrow/source-selector (arrow)
+  (getf (arrow/properties arrow) :source-selector))
+
+(defun arrow/target-selector (arrow)
+  (getf (arrow/properties arrow) :target-selector))
+
+;;; *** type constraint ***
+
+(defparameter *type-constraint-function*
+  #'(lambda (source-node target-node arrow graph)
+      (declare (ignore graph))
+      (type/reducible? (record/nested-search (node/type source-node)
+                                             (arrow/source-selector arrow))
+                       (record/nested-search (node/type target-node)
+                                             (arrow/target-selector arrow)))))
+
+;;; *** print functions ***
+
 (defparameter *type-constraint/node-print-function*
   #'(lambda (plist)
       (format nil "(~S -> ~S)"
@@ -363,34 +339,14 @@
               (getf plist :output-type)
               (getf plist :input-type))))
 
-;;; *** arrow type selector ***
-
-(defun arrow/source-selector (arrow)
-  (getf (arrow/properties arrow) :source-selector))
-
-(defun arrow/target-selector (arrow)
-  (getf (arrow/properties arrow) :target-selector))
-
 (defparameter *type-constraint/arrow-print-function*
   #'(lambda (plist)
       (format nil "(~S -> ~S)"
               (getf plist :input-selector)
               (getf plist :output-selector))))
 
-;;; *** module print function ***
-
 (defparameter *type-constraint/module-print-function*
   #'(lambda (plist)
       (format nil "(~S -> ~S)"
               (getf plist :input-type)
               (getf plist :output-type))))
-
-;;; *** type constraint ***
-
-(defparameter *type-constraint-function*
-  #'(lambda (source-node target-node arrow graph)
-      (declare (ignore graph))
-      (type/compatible? (record/nested-search (node/type source-node)
-                                              (arrow/source-selector arrow))
-                        (record/nested-search (node/type target-node)
-                                              (arrow/target-selector arrow)))))

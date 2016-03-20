@@ -77,16 +77,16 @@
 (macrolet ((edges->connections (edges-sexp ignore-world-var)
              (alexandria:with-gensyms (connections edge arrow id conn)
                `(let ((,connections
-                       (reduce #'nconc
-                               (mapcar #'(lambda (,edge)
-                                           (mapcar #'(lambda (,arrow)
-                                                       (make-connection
-                                                        ,arrow
-                                                        (element (source-vertex ,edge))
-                                                        (element (target-vertex ,edge))))
-                                                   (element ,edge)))
-                                       ,edges-sexp)
-                               :from-end t)))
+                       (alexandria:mappend
+                        #'(lambda (,edge)
+                            (mapcar #'(lambda (,arrow)
+                                        (make-connection
+                                         ,arrow
+                                         (element (source-vertex ,edge))
+                                         (element (target-vertex ,edge))))
+                                    (element ,edge)))
+                        ,edges-sexp)
+                        :from-end t))
                   (if (not ,ignore-world-var)
                       ,connections
                       (delete-if #'(lambda (,conn)
@@ -174,12 +174,12 @@
                     :test #'arrow-equal))))))
 
 (defun graph/connect! (graph connection
-                       &optional (constraints-cf *constraints-conjoint-function*))
+                       &optional (constraint-fn *constraints-conjoint-function*))
   (multiple-value-bind (edge src-vertex tgt-vertex)
       (~graph/edge graph (connection/source-id connection)
                    (connection/target-id connection))
     (when (and (and src-vertex tgt-vertex)
-             (funcall constraints-cf (element src-vertex) (element tgt-vertex)
+             (funcall constraint-fn (element src-vertex) (element tgt-vertex)
                       (connection/arrow connection) graph))
       (if (null edge)
           (add-edge-between-vertexes graph src-vertex tgt-vertex

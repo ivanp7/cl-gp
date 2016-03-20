@@ -4,7 +4,7 @@
 
 ;;; *** arrow ***
 
-(defparameter *arrow/test* #'equal)
+(defparameter *arrow/test* #'equalp)
 
 (defparameter *arrow/print-functions-list* nil)
 
@@ -32,7 +32,7 @@
               (arrow/print-function arrow)))
 
 (defun arrow-equal (arrow1 arrow2)
-  (funcall *arrow/test* (arrow/properties arrow1) (arrow/properties arrow2)))
+  (funcall *arrow/test* (arrow/properties arrow1) (arrow/properties arrow)))
 
 ;;; *** connection ***
 

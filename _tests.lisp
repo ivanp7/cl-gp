@@ -8,7 +8,7 @@
     (* n (factorial (- n 1))))
 |#
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; реализовать список печатающих функций и их комбинацию
+
 
 (defparameter *integer-type* (make-primitive-type 'integer))
 (defparameter *greater-integer-type* (make-primitive-type 'greater-integer))
