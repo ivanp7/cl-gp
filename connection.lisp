@@ -4,7 +4,7 @@
 
 ;;; *** arrow ***
 
-(defparameter *arrow/test* #'equalp)
+(defparameter *arrow/properties-test* #'equalp)
 
 (defparameter *arrow/print-functions-list* nil)
 
@@ -12,6 +12,12 @@
   ((properties :reader arrow/properties
                :initarg :properties
                :initform nil)
+   (addition-to-graph-fn :accessor arrow/addition-to-graph-event-handler
+                         :initarg :addition-to-graph-fn
+                         :initform (constantly nil))
+   (deletion-from-graph-fn :accessor arrow/deletion-from-graph-event-handler
+                           :initarg :deletion-from-graph-fn
+                           :initform (constantly nil))
    (print-function :accessor arrow/print-function
                    :initarg :print-function
                    :initform (constantly ""))))
@@ -21,18 +27,25 @@
     (with-slots (properties print-function) instance
       (format st "ARROW ~A" (funcall print-function properties)))))
 
-(defun make-arrow (&key properties (print-function (make-conjoint-print-function
-                                                    *arrow/print-functions-list*)))
+(defun make-arrow (&key properties
+                     (addition-to-graph-fn (constantly nil))
+                     (deletion-from-graph-fn (constantly nil))
+                     (print-function (make-conjoint-print-function
+                                      *arrow/print-functions-list*)))
   (make-instance 'object/arrow
                  :properties properties
+                 :addition-to-graph-fn addition-to-graph-fn
+                 :deletion-from-graph-fn deletion-from-graph-fn
                  :print-function print-function))
 
 (defun copy-arrow (arrow)
-  (make-arrow (funcall *properties-copy-function* (arrow/properties arrow))
-              (arrow/print-function arrow)))
+  (make-arrow :properties (funcall *properties-copy-function* (arrow/properties arrow))
+              :addition-to-graph-fn (arrow/addition-to-graph-event-handler arrow)
+              :deletion-from-graph-fn (arrow/deletion-from-graph-event-handler arrow)
+              :print-function (arrow/print-function arrow)))
 
 (defun arrow-equal (arrow1 arrow2)
-  (funcall *arrow/test* (arrow/properties arrow1) (arrow/properties arrow)))
+  (funcall *arrow/properties-test* (arrow/properties arrow1) (arrow/properties arrow)))
 
 ;;; *** connection ***
 
@@ -71,3 +84,14 @@
                (connection/target-id conn2))
      (arrow-equal (connection/arrow conn1)
                   (connection/arrow conn2))))
+
+(defun connection/other-id (conn id)
+  (let ((s-id (connection/source-id conn))
+        (s-id-equal (id-equal id s-id))
+        (t-id (connection/target-id conn))
+        (t-id-equal (id-equal id t-id)))
+    (cond
+      ((and s-id-equal t-id-equal) (values id :loop))
+      (t-id-equal (values s-id :input))
+      (s-id-equal (values t-id :output))
+      (t (values nil nil)))))

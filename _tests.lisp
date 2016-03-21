@@ -18,15 +18,15 @@
          (constantly " : ")
          *type-constraint/module-print-function*))
 
-(setf *node/print-function*
+(setf *node/print-functions-list*
    (list *name-print-function*
          (constantly " : ")
          *type-constraint/node-print-function*))
 
-(defparameter *world-node/print-function*
+(defparameter *world-node/print-functions-list*
   (list *type-constraint/world-node-print-function*))
 
-(defparameter *arrow/print-function*
+(defparameter *arrow/print-functions-list*
   (list *type-constraint/arrow-print-function*))
 
 (defparameter *factorial*
@@ -37,7 +37,8 @@
                                                        :input-type *greater-integer-type*)))
 
 
-
+(graph/add-node! (module/graph *factorial*)
+                 (make-node 1 :properties (make-properties :name )))
 
 (print (module/add-node! *factorial* (node/new-input 'n 'integer))) ; 1
 (print (module/add-node! *factorial* (node/new-output 'factorial 'integer))) ; 2
