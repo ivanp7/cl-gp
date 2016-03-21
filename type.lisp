@@ -291,18 +291,11 @@
 
 ;;; *** node type data ***
 
-(defun node/type (node)
-  (getf (node/properties node) :type))
-
 (defun node/input-type (node)
-  (if (node/call? node)
-      (function-type/argument (node/type node))
-      +type/bottom+))
+  (getf (node/properties node) :input-type +type/bottom+))
 
 (defun node/output-type (node)
-  (if (node/call? node)
-      (function-type/result (node/type node))
-      (node/type node)))
+  (getf (node/properties node) :output-type +type/bottom+))
 
 ;;; *** arrow type selector ***
 
@@ -323,9 +316,9 @@
 (defparameter *type-constraint-function*
   #'(lambda (source-node target-node arrow graph)
       (declare (ignore graph))
-      (type/reducible? (type/nested-selection (node/type source-node)
+      (type/reducible? (type/nested-selection (node/output-type source-node)
                                               (arrow/source-type-selector arrow))
-                       (type/nested-selection (node/type target-node)
+                       (type/nested-selection (node/input-type target-node)
                                               (arrow/target-type-selector arrow)))))
 
 ;;; *** print functions ***

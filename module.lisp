@@ -8,6 +8,8 @@
 
 (defparameter *graph/hide-world* nil)
 
+(defparameter *graph/connections-order-function* (constantly nil))
+
 
 
 (defun ~graph/vertex (graph id)
@@ -97,44 +99,59 @@
                                  ,connections))))))
 
   (defun graph/input-connections (graph target-ids &key (except-world-connections
-                                                         *graph/hide-world*))
-    (edges->connections
-     (iterate:iter
-       (for id in target-ids)
-       (for vertex = (~graph/vertex graph id))
-       (when vertex
-         (nconcing (delete-if
-                    #'(lambda (edge)
-                        (member (node/id (element (source-vertex edge)))
-                           target-ids
-                           :test *node/id-test*))
-                    (target-edges vertex)))))
-     except-world-connections))
+                                                         *graph/hide-world*)
+                                                     (connections-order-fn
+                                                      *graph/connections-order-function*))
+    (sort (edges->connections
+           (iterate:iter
+             (for id in target-ids)
+             (for vertex = (~graph/vertex graph id))
+             (when vertex
+               (nconcing (delete-if
+                          #'(lambda (edge)
+                              (member (node/id (element (source-vertex edge)))
+                                 target-ids
+                                 :test *node/id-test*))
+                          (target-edges vertex)))))
+           except-world-connections)
+          connections-order-fn))
 
   (defun graph/output-connections (graph source-ids &key (except-world-connections
-                                                          *graph/hide-world*))
-    (edges->connections
-     (iterate:iter
-       (for id in source-ids)
-       (for vertex = (~graph/vertex graph id))
-       (when vertex
-         (nconcing (delete-if
-                    #'(lambda (edge)
-                        (member (node/id (element (target-vertex edge)))
-                           source-ids
-                           :test *node/id-test*))
-                    (source-edges vertex)))))
-     except-world-connections))
+                                                          *graph/hide-world*)
+                                                      (connections-order-fn
+                                                       *graph/connections-order-function*))
+    (sort (edges->connections
+           (iterate:iter
+             (for id in source-ids)
+             (for vertex = (~graph/vertex graph id))
+             (when vertex
+               (nconcing (delete-if
+                          #'(lambda (edge)
+                              (member (node/id (element (target-vertex edge)))
+                                 source-ids
+                                 :test *node/id-test*))
+                          (source-edges vertex)))))
+           except-world-connections)
+          connections-order-fn))
 
   (defun graph/external-connections (graph ids &key (except-world-connections
-                                                     *graph/hide-world*))
-    (nconc (graph/input-connections
-            graph ids :except-world-connections except-world-connections)
-           (graph/output-connections
-            graph ids :except-world-connections except-world-connections)))
+                                                     *graph/hide-world*)
+                                                 (connections-order-fn
+                                                  *graph/connections-order-function*))
+    (sort (nconc (graph/input-connections
+                  graph ids
+                  :except-world-connections except-world-connections
+                  :connections-order-fn (constantly nil))
+                 (graph/output-connections
+                  graph ids
+                  :except-world-connections except-world-connections
+                  :connections-order-fn (constantly nil)))
+          connections-order-fn))
 
   (defun graph/connections (graph source-ids target-ids &key (except-world-connections
-                                                              *graph/hide-world*))
+                                                              *graph/hide-world*)
+                                                          (connections-order-fn
+                                                           *graph/connections-order-function*))
     (macrolet ((conn-macro (ids-var edges-fn)
                  `(edges->connections
                    (iterate:iter
@@ -152,16 +169,23 @@
                                    :test *node/id-test*)))
                          (,edges-fn vertex)))))
                    except-world-connections)))
-      (if (< (length source-ids) (length target-ids))
-          (conn-macro source-ids source-edges)
-          (conn-macro target-ids target-edges))))
+      (sort (if (< (length source-ids) (length target-ids))
+                (conn-macro source-ids source-edges)
+                (conn-macro target-ids target-edges))
+            connections-order-fn)))
 
   (defun graph/internal-connections (graph ids &key (except-world-connections
-                                                     *graph/hide-world*))
-    (graph/connections ids ids :except-world-connections except-world-connections))
+                                                     *graph/hide-world*)
+                                                 (connections-order-fn
+                                                  *graph/connections-order-function*))
+    (graph/connections ids ids
+                       :except-world-connections except-world-connections
+                       :connections-order-fn connections-order-fn))
 
-  (defun graph/all-connections (graph &key (except-world-connections *graph/hide-world*))
-    (edges->connections (edges graph) except-world-connections)))
+  (defun graph/all-connections (graph &key (except-world-connections *graph/hide-world*)
+                                        (connections-order-fn
+                                         *graph/connections-order-function*))
+    (sort (edges->connections (edges graph) except-world-connections) connections-order-fn)))
 
 
 
