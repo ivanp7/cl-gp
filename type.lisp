@@ -27,17 +27,19 @@
 (defmethod type/reducible? ((source-type abstract-type) (target-type abstract-type))
   (funcall *type/name-test* (type/name source-type) (type/name target-type)))
 
-(defun type/kind (object)
-  (type-of object))
+(defgeneric type/subtype (type part)
+  (:documentation "Extract (select) a part subtype of type"))
 
-(defun type-of-kind? (type kind)
-  (typep type kind))
+(defmethod type/subtype ((type abstract-type) part)
+  (error "TYPE/SUBTYPE -- attempt to select subtype on a indivisible type"))
+
+
 
 (defmacro define-type-constant (constant-name kind &rest args)
   `(alexandria:define-constant ,constant-name (make-instance ',kind ,@args)
      :test #'(lambda (val1 val2)
-               (alexandria:type= (type/kind val1)
-                                 (type/kind val2)))))
+               (alexandria:type= (type-of val1)
+                                 (type-of val2)))))
 
 ;;; *** top type ***
 
@@ -237,18 +239,13 @@
 (defun type/record? (type)
   (typep type 'record))
 
-(defun record/nested-search (type fields-names-list)
-  (if (null fields-names-list)
-      type
-      (if (type/record? type)
-          (with-slots (fields) type
-            (let ((field (find (first fields-names-list) fields
-                               :key #'field/name :test *field/name-test*)))
-              (if field
-                  (record/nested-search
-                   (field/type field) (rest fields-names-list))
-                  +type/bottom+)))
-          +type/bottom+)))
+(defmethod type/subtype ((type record) part)
+  (with-slots (fields) type
+    (let ((field (find part fields
+                       :key #'field/name :test *field/name-test*)))
+      (if field
+          (field/type field)
+          (error "TYPE/SUBTYPE -- record doesn't have field with a name ~S" part)))))
 
 (defmethod type/reducible? ((source-type abstract-type) (target-type record))
   (and (type/record? source-type)
@@ -309,21 +306,27 @@
 
 ;;; *** arrow type selector ***
 
-(defun arrow/source-selector (arrow)
-  (getf (arrow/properties arrow) :source-selector))
+(defun arrow/source-type-selector (arrow)
+  (getf (arrow/properties arrow) :source-type-selector))
 
-(defun arrow/target-selector (arrow)
-  (getf (arrow/properties arrow) :target-selector))
+(defun arrow/target-type-selector (arrow)
+  (getf (arrow/properties arrow) :target-type-selector))
 
 ;;; *** type constraint ***
+
+(defun type/nested-selection (type selector)
+  (if (null selector)
+      type
+      (type/nested-selection (type/subtype type (first selector))
+                             (rest selector))))
 
 (defparameter *type-constraint-function*
   #'(lambda (source-node target-node arrow graph)
       (declare (ignore graph))
-      (type/reducible? (record/nested-search (node/type source-node)
-                                             (arrow/source-selector arrow))
-                       (record/nested-search (node/type target-node)
-                                             (arrow/target-selector arrow)))))
+      (type/reducible? (type/nested-selection (node/type source-node)
+                                              (arrow/source-type-selector arrow))
+                       (type/nested-selection (node/type target-node)
+                                              (arrow/target-type-selector arrow)))))
 
 ;;; *** print functions ***
 
@@ -342,8 +345,8 @@
 (defparameter *type-constraint/arrow-print-function*
   #'(lambda (plist)
       (format nil "(~S -> ~S)"
-              (getf plist :input-selector)
-              (getf plist :output-selector))))
+              (getf plist :source-type-selector)
+              (getf plist :target-type-selector))))
 
 (defparameter *type-constraint/module-print-function*
   #'(lambda (plist)
