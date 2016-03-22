@@ -18,6 +18,9 @@
 (defun module/name (module)
   (getf (module/properties module) :name))
 
+(defun make-name-property (name)
+  (make-properties :name name))
+
 ;;; *** graph -> s-expression convertion ***
 
 (defun graph->sexp (graph)

@@ -9,7 +9,7 @@
 (defparameter *arrow/print-functions-list* nil)
 
 (defclass object/arrow ()
-  ((properties :reader arrow/properties
+  ((properties :accessor arrow/properties
                :initarg :properties
                :initform nil)
    (addition-to-graph-fn :accessor arrow/addition-to-graph-event-handler
@@ -39,7 +39,7 @@
                  :print-function print-function))
 
 (defun copy-arrow (arrow)
-  (make-arrow :properties (funcall *properties-copy-function* (arrow/properties arrow))
+  (make-arrow :properties (copy-properties (arrow/properties arrow))
               :addition-to-graph-fn (arrow/addition-to-graph-event-handler arrow)
               :deletion-from-graph-fn (arrow/deletion-from-graph-event-handler arrow)
               :print-function (arrow/print-function arrow)))
@@ -50,15 +50,15 @@
 ;;; *** connection ***
 
 (defclass object/connection ()
-  ((arrow :reader connection/arrow
+  ((arrow :accessor connection/arrow
           :initarg :arrow
-          :initform (error "OBJECT/CONNECTION -- :arrow parameter must be supplied"))
-   (source :reader connection/source-id
+          :initform (error "CONNECTION -- :arrow parameter must be supplied"))
+   (source :accessor connection/source-id
            :initarg :source
-           :initform (error "OBJECT/CONNECTION -- :source parameter must be supplied"))
-   (target :reader connection/target-id
+           :initform (error "CONNECTION -- :source parameter must be supplied"))
+   (target :accessor connection/target-id
            :initarg :target
-           :initform (error "OBJECT/CONNECTION -- :target parameter must be supplied"))))
+           :initform (error "CONNECTION -- :target parameter must be supplied"))))
 
 (defmethod print-object ((instance object/connection) st)
   (print-unreadable-object (instance st :identity t)
@@ -85,13 +85,22 @@
      (arrow-equal (connection/arrow conn1)
                   (connection/arrow conn2))))
 
-(defun connection/other-id (conn id)
-  (let ((s-id (connection/source-id conn))
-        (s-id-equal (id-equal id s-id))
-        (t-id (connection/target-id conn))
-        (t-id-equal (id-equal id t-id)))
+(defun connection/direction (connection id)
+  (let ((src-id (connection/source-id connection))
+        (src-id-equal (id-equal id src-id))
+        (tgt-id (connection/target-id connection))
+        (tgt-id-equal (id-equal id tgt-id)))
     (cond
-      ((and s-id-equal t-id-equal) (values id :loop))
-      (t-id-equal (values s-id :input))
-      (s-id-equal (values t-id :output))
+      ((and src-id-equal tgt-id-equal) (values :loop id))
+      (tgt-id-equal (values :input src-id))
+      (src-id-equal (values :output tgt-id))
       (t (values nil nil)))))
+
+(defun direction/loop? (dir)
+  (eql dir :loop))
+
+(defun direction/input? (dir)
+  (eql dir :input))
+
+(defun direction/output? (dir)
+  (eql dir :output))

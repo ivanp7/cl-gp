@@ -12,9 +12,10 @@
 (defparameter *node/print-functions-list* nil)
 
 (defclass object/node ()
-  ((id :reader node/id
-       :initarg :id)
-   (properties :reader node/properties
+  ((id :accessor node/id
+       :initarg :id
+       :initform (error "NODE -- :id parameter must be supplied"))
+   (properties :accessor node/properties
                :initarg :properties
                :initform nil)
    (addition-to-graph-fn :accessor node/addition-to-graph-event-handler
@@ -56,7 +57,7 @@
 
 (defun copy-node (node)
   (make-node (node/id node)
-             :properties (funcall *properties-copy-function* (node/properties node))
+             :properties (copy-properties (node/properties node))
              :addition-to-graph-fn (node/addition-to-graph-event-handler node)
              :deletion-from-graph-fn (node/deletion-from-graph-event-handler node)
              :setting-of-connection-fn (node/setting-of-connection-event-handler node)

@@ -234,8 +234,8 @@
                     (element edge)
                     :test #'arrow-equal))))))
 
-(defun graph/connect! (graph connection
-                       &optional (constraint-fn *constraints-conjoint-function*))
+(defun graph/connect! (graph connection &key (constraint-fn
+                                              *constraints-conjoint-function*))
   (multiple-value-bind (edge src-vertex tgt-vertex)
       (~graph/edge graph (connection/source-id connection)
                    (connection/target-id connection))
@@ -279,32 +279,25 @@
 
 
 
-(defun graph/make-graph (&optional nodes connections)
-  (let ((graph (make-graph 'graph-container :default-edge-type :directed)))
-    (dolist (node nodes)
-      (graph/add-node! graph node))
-    (if nodes
-        (dolist (conn connections)
-          (graph/connect! graph conn)))
-    graph))
+(defun graph/fitting-connection? (graph connection &key (constraint-fn
+                                                         *constraints-conjoint-function*))
+  (let ((source-node (graph/node graph (connection/source-id connection)))
+        (target-node (graph/node graph (connection/target-id connection))))
+    (if (and source-node target-node)
+        (funcall constraint-fn source-node target-node (connection/arrow conn) graph))))
 
-(defun graph/copy-graph (graph &key except-world-node)
-  (let* ((nodes
-          (mapcar #'copy-node
-                  (graph/all-nodes graph
-                                   :except-world-node except-world-node)))
-         (connections
-          (mapcar #'copy-connection
-                  (graph/all-connections graph
-                                         :except-world-connections except-world-node))))
-    (graph/make-graph nodes connections)))
+(defun graph/revise-connection! (graph connection &key (constraint-fn
+                                                        *constraints-conjoint-function*))
+  (unless (graph/fitting-connection? graph connection :constraint-fn constraint-fn)
+    (graph/disconnect! graph connection)))
 
-(defun graph/copy-subgraph (graph ids)
-  (let* ((nodes (mapcar #'copy-genotype-node (graph/nodes graph ids)))
-         (existing-ids (mapcar #'node/id nodes))
-         (connections (mapcar #'copy-connection
-                              (graph/internal-connections graph existing-ids))))
-    (graph/make-graph nodes connections)))
+(defun graph/revise-related-connections! (graph ids &key (constraint-fn
+                                                          *constraints-conjoint-function*))
+  (iterate:iter (for conn in (graph/related-connections graph ids))
+                (counting (graph/revise-connection!
+                           graph conn :constraint-fn constraint-fn))))
+
+
 
 (defun graph/insert-subgraph! (graph subgraph)
   (let ((common-nodes-ids (mapcar #'node/id
@@ -332,6 +325,35 @@
       (graph/connect! graph conn))
     t))
 
+
+
+(defun graph/make-graph (&optional nodes connections)
+  (let ((graph (make-graph 'graph-container :default-edge-type :directed)))
+    (dolist (node nodes)
+      (graph/add-node! graph node))
+    (if nodes
+        (dolist (conn connections)
+          (graph/connect! graph conn)))
+    graph))
+
+(defun graph/copy-graph (graph &key except-world-node)
+  (let* ((nodes
+          (mapcar #'copy-node
+                  (graph/all-nodes graph
+                                   :except-world-node except-world-node)))
+         (connections
+          (mapcar #'copy-connection
+                  (graph/all-connections graph
+                                         :except-world-connections except-world-node))))
+    (graph/make-graph nodes connections)))
+
+(defun graph/copy-subgraph (graph ids)
+  (let* ((nodes (mapcar #'copy-genotype-node (graph/nodes graph ids)))
+         (existing-ids (mapcar #'node/id nodes))
+         (connections (mapcar #'copy-connection
+                              (graph/internal-connections graph existing-ids))))
+    (graph/make-graph nodes connections)))
+
 ;;; *** module ***
 
 (defparameter *module/print-functions-list* nil)
@@ -340,10 +362,7 @@
 (defclass object/module ()
   ((graph :reader module/graph
           :initarg :graph
-          :initform (error "OBJECT/MODULE -- :graph parameter must be supplied"))
-   (properties :reader module/properties
-               :initarg :properties
-               :initform nil)
+          :initform (error "MODULE -- :graph parameter must be supplied"))
    (print-function :accessor module/print-function
                    :initarg :print-function
                    :initform (constantly ""))))
@@ -353,39 +372,35 @@
     (with-slots (properties print-function) instance
       (format st "MODULE ~A" (funcall print-function properties)))))
 
-(defun make-module (&key properties (print-function (make-conjoint-print-function
-                                                     *module/print-functions-list*))
-                      world-node-properties
-                      (world-node-print-function (make-conjoint-print-function
-                                                  *world-node/print-functions-list*)))
+(defun make-module (&key wn-properties
+                      (wn-addition-to-graph-fn (constantly nil))
+                      (wn-deletion-from-graph-fn (constantly nil))
+                      (wn-setting-of-connection-fn (constantly nil))
+                      (wn-loss-of-connection-fn (constantly nil))
+                      (wn-print-function (make-conjoint-print-function
+                                          *world-node/print-functions-list*))
+                      (module-print-function (make-conjoint-print-function
+                                              *module/print-functions-list*)))
   (make-instance 'object/module
                  :graph (graph/make-graph
                          (list (make-node *world-node-id*
-                                          :properties world-node-properties
-                                          :print-function world-node-print-function)))
-                 :properties properties
-                 :print-function print-function))
+                                          :properties wn-properties
+                                          :addition-to-graph-fn wn-addition-to-graph-fn
+                                          :deletion-from-graph-fn wn-deletion-from-graph-fn
+                                          :setting-of-connection-fn wn-setting-of-connection-fn
+                                          :loss-of-connection-fn wn-loss-of-connection-fn
+                                          :print-function wn-print-function)))
+                 :print-function module-print-function))
 
 (defun copy-module (module)
   (make-instance 'object/module
-                 :graph (copy-graph (module/graph module))
-                 :properties (funcall *properties-copy-function* (module/properties module))
+                 :graph (graph/copy-graph (module/graph module))
                  :print-function (module/print-function module)))
 
-(defun module/ensure-world-node-existence! (module &key world-node-properties
-                                                     (addition-to-graph-fn (constantly nil))
-                                                     (deletion-from-graph-fn (constantly nil))
-                                                     (setting-of-connection-fn (constantly nil))
-                                                     (loss-of-connection-fn (constantly nil))
-                                                     (world-node-print-function
-                                                      (make-conjoint-print-function
-                                                       *world-node/print-functions-list*)))
-  (if (null (graph/node (module/graph module) *world-node-id*))
-      (graph/add-node! (module/graph module)
-                       (make-node *world-node-id*
-                                  :properties world-node-properties
-                                  :addition-to-graph-fn addition-to-graph-fn
-                                  :deletion-from-graph-fn deletion-from-graph-fn
-                                  :setting-of-connection-fn setting-of-connection-fn
-                                  :loss-of-connection-fn loss-of-connection-fn
-                                  :print-function world-node-print-function))))
+(defun module/world-node (module)
+  (graph/node (module/graph module) *world-node-id*))
+
+(defun module/world-node-properties (module)
+  (let ((world-node (graph/node (module/graph module) *world-node-id*)))
+    (if world-node
+        (node/properties world-node))))

@@ -8,10 +8,14 @@
     (* n (factorial (- n 1))))
 |#
 
-
-
+(defparameter *boolean-type* (make-primitive-type 'boolean))
 (defparameter *integer-type* (make-primitive-type 'integer))
-(defparameter *greater-integer-type* (make-primitive-type 'greater-integer))
+(defparameter *greater-integer-type*
+  (make-primitive-type 'greater-integer
+                       :reducibility-test
+                       #'(lambda (type)
+                           (and (type/primitive? type)
+                              (type-name-equal (type/name type) 'integer)))))
 
 (setf *module/print-functions-list*
    (list *name-print-function*
@@ -30,15 +34,33 @@
   (list *type-constraint/arrow-print-function*))
 
 (defparameter *factorial*
-  (make-module :properties (make-properties :name 'factorial
-                                            :input-type *integer-type*
-                                            :output-type *greater-integer-type*)
-               :world-node-properties (make-properties :output-type *integer-type*
-                                                       :input-type *greater-integer-type*)))
+  (make-module :wn-properties
+               (join-properties
+                (list (make-name-property 'factorial)
+                      (make-module-type-properties :input-type *integer-type*
+                                                   :output-type *greater-integer-type*)))))
 
 
 (graph/add-node! (module/graph *factorial*)
-                 (make-node 1 :properties (make-properties :name )))
+                 (make-node 1 :properties
+                            (make-properties
+                             :name 'if
+                             :input-type (make-record
+                                          (list
+                                           (make-field 'condition *boolean-type*)
+                                           (make-field 'consequence +top-type+)
+                                           (make-field 'alternative +top-type+)))
+                             :output-type +top-type+)
+                            :setting-of-connection-fn
+                            #'(lambda (node connection graph)
+                                (multiple-value-bind (direction id)
+                                    (connection/other-id connection 1)
+                                  (if (or (direction/input? direction)
+                                         (direction/loop? direction))
+                                      )))
+                            :loss-of-connection-fn
+                            #'(lambda (node connection graph)
+                                )))
 
 (print (module/add-node! *factorial* (node/new-input 'n 'integer))) ; 1
 (print (module/add-node! *factorial* (node/new-output 'factorial 'integer))) ; 2
@@ -119,5 +141,3 @@
 (princ "------------------")
 
 (print (module/all-nodes *factorial*))
-
-(print (module/diagram *factorial*))

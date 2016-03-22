@@ -2,10 +2,24 @@
 
 (in-package #:cl-gp)
 
-(defparameter *properties-copy-function* #'copy-list)
-
 (defun make-properties (&rest plist)
   (apply #'list plist))
+
+(defun copy-properties (properties)
+  (copy-list properties))
+
+(defun join-properties (properties-list)
+  (reduce #'append properties-list :from-end t))
+
+
+
+(defun get-property (properties key &optional default-value)
+  (getf properties key default-value))
+
+(defun (setf get-property) (new-value properties key &optional default-value)
+  (setf (getf properties key default-value) new-value))
+
+
 
 (defun make-conjoint-print-function (fn-list)
   #'(lambda (plist)
