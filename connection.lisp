@@ -2,6 +2,14 @@
 
 (in-package #:cl-gp)
 
+;;; *** selector ***
+
+(defun make-selector (tags-list)
+  (copy-list tags-list))
+
+(defun copy-selector (selector)
+  (copy-list selector))
+
 ;;; *** arrow ***
 
 (defparameter *arrow/properties-test* #'equalp)
@@ -9,7 +17,13 @@
 (defparameter *arrow/print-functions-list* nil)
 
 (defclass object/arrow ()
-  ((properties :accessor arrow/properties
+  ((source-selector :accessor arrow/source-selector
+                    :initarg :source-selector
+                    :initform nil)
+   (target-selector :accessor arrow/target-selector
+                    :initarg :target-selector
+                    :initform nil)
+   (properties :accessor arrow/properties
                :initarg :properties
                :initform nil)
    (addition-to-graph-fn :accessor arrow/addition-to-graph-event-handler
@@ -27,19 +41,23 @@
     (with-slots (properties print-function) instance
       (format st "ARROW ~A" (funcall print-function properties)))))
 
-(defun make-arrow (&key properties
+(defun make-arrow (&key source-selector target-selector properties
                      (addition-to-graph-fn (constantly nil))
                      (deletion-from-graph-fn (constantly nil))
                      (print-function (make-conjoint-print-function
                                       *arrow/print-functions-list*)))
   (make-instance 'object/arrow
+                 :source-selector source-selector
+                 :target-selector target-selector
                  :properties properties
                  :addition-to-graph-fn addition-to-graph-fn
                  :deletion-from-graph-fn deletion-from-graph-fn
                  :print-function print-function))
 
 (defun copy-arrow (arrow)
-  (make-arrow :properties (copy-properties (arrow/properties arrow))
+  (make-arrow :source-selector (copy-selector (arrow/source-selector arrow))
+              :target-selector (copy-selector (arrow/target-selector arrow))
+              :properties (copy-properties (arrow/properties arrow))
               :addition-to-graph-fn (arrow/addition-to-graph-event-handler arrow)
               :deletion-from-graph-fn (arrow/deletion-from-graph-event-handler arrow)
               :print-function (arrow/print-function arrow)))

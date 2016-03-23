@@ -99,25 +99,34 @@
     ((or (type/top? source-type) (type/top? target-type)) t)
     (t (funcall (type/reducibility-test target-type) source-type))))
 
-;;; *** type class ***
+;;; *** union type ***
 
-(defclass type-class (abstract-type)
-  ((print-info :accessor type-class/print-info
+(defclass union-type (abstract-type)
+  ((name :reader union-type/name
+         :initarg :name
+         :initform (error "UNION-TYPE -- :name parameter must be supplied"))
+   (print-info :accessor union-type/print-info
                :initarg :print-info
                :initform "")))
 
-(defmethod print-object ((instance type-class) st)
+(defmethod print-object ((instance union-type) st)
   (print-unreadable-object (instance st :identity t)
-    (with-slots (print-info) instance
-      (format st "TYPE-CLASS ~S ~S" print-info))))
+    (with-slots (name print-info) instance
+      (format st "UNION-TYPE ~S ~S" name print-info))))
 
-(defun make-type-class (print-info reducibility-test &key properties)
-  (make-instance 'type-class :print-info print-info
+(defun make-union-type (name reducibility-test &key (print-info "") properties)
+  (make-instance 'union-type :name name :print-info print-info
                  :reducibility-test reducibility-test
                  :properties properties))
 
-(defun type/type-class? (type)
-  (typep type 'type-class))
+(defun type/union-type? (type)
+  (typep type 'union-type))
+
+(defmethod type/reducible? ((source-type abstract-type) (target-type union-type))
+  (or (and (type/union-type? source-type)
+        (type-name-equal (union-type/name source-type)
+                         (union-type/name target-type)))
+     (call-next-method)))
 
 ;;; *** typed value ***
 
@@ -189,7 +198,8 @@
 
 (defmethod type/reducible? ((source-type abstract-type) (target-type parametric-type))
   (or (and (type/parametric? source-type)
-        (type-name-equal (type/name source-type) (type/name target-type))
+        (type-name-equal (parametric-type/name source-type)
+                         (parametric-type/name target-type))
         (= (length (parametric-type/arguments source-type))
            (length (parametric-type/arguments target-type)))
         (every #'(lambda (source-arg target-arg)
@@ -228,7 +238,8 @@
 
 (defmethod type/reducible? ((source-type abstract-type) (target-type primitive-type))
   (or (and (type/primitive? source-type)
-        (type-name-equal (type/name source-type) (type/name target-type)))
+        (type-name-equal (primitive-type/name source-type)
+                         (primitive-type/name target-type)))
      (call-next-method)))
 
 ;;; *** record ***
@@ -359,14 +370,6 @@
 (defun module/output-type (module)
   (get-property (module/world-node-properties module) :input-type +type/bottom+))
 
-;;; *** arrow type selector ***
-
-(defun arrow/source-type-selector (arrow)
-  (get-property (arrow/properties arrow) :source-type-selector))
-
-(defun arrow/target-type-selector (arrow)
-  (get-property (arrow/properties arrow) :target-type-selector))
-
 ;;; *** type constraint ***
 
 (defun type/nested-selection (type selector)
@@ -379,9 +382,9 @@
   #'(lambda (source-node target-node arrow graph)
       (declare (ignore graph))
       (let ((source-type (type/nested-selection (node/output-type source-node)
-                                                (arrow/source-type-selector arrow)))
+                                                (arrow/source-selector arrow)))
             (target-type (type/nested-selection (node/input-type target-node)
-                                                (arrow/target-type-selector arrow))))
+                                                (arrow/target-selector arrow))))
         (type/reducible? source-type target-type))))
 
 ;;; *** print functions ***

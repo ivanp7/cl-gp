@@ -8,6 +8,10 @@
     (* n (factorial (- n 1))))
 |#
 
+(setf *constraints-conjoint-function*
+   (make-conjoint-function (list *feedforward-constraint-function*
+                                 *type-constraint-function*)))
+
 (defparameter *boolean-type* (make-primitive-type 'boolean))
 (defparameter *integer-type* (make-primitive-type 'integer))
 (defparameter *greater-integer-type*
@@ -41,26 +45,29 @@
                                                    :output-type *greater-integer-type*)))))
 
 
-(graph/add-node! (module/graph *factorial*)
-                 (make-node 1 :properties
-                            (make-properties
-                             :name 'if
-                             :input-type (make-record
-                                          (list
-                                           (make-field 'condition *boolean-type*)
-                                           (make-field 'consequence +top-type+)
-                                           (make-field 'alternative +top-type+)))
-                             :output-type +top-type+)
-                            :setting-of-connection-fn
-                            #'(lambda (node connection graph)
-                                (multiple-value-bind (direction id)
-                                    (connection/other-id connection 1)
-                                  (if (or (direction/input? direction)
-                                         (direction/loop? direction))
-                                      )))
-                            :loss-of-connection-fn
-                            #'(lambda (node connection graph)
-                                )))
+(graph/add-node!
+ (module/graph *factorial*)
+ (make-node 1 :properties
+            (make-properties
+             :name 'if
+             :input-type (make-record
+                          (list
+                           (make-field 'condition *boolean-type*)
+                           (make-field 'consequence +top-type+)
+                           (make-field 'alternative +top-type+)))
+             :output-type +top-type+)
+            :setting-of-connection-fn
+            (make-sequence-function
+             (list #'(lambda (node connection graph)
+                       (multiple-value-bind (direction id)
+                           (connection/other-id connection 1)
+                         (if (or (direction/input? direction)
+                                (direction/loop? direction))
+                             )))))
+            :loss-of-connection-fn
+            (make-sequence-function
+             (list #'(lambda (node connection graph)
+                       )))))
 
 (print (module/add-node! *factorial* (node/new-input 'n 'integer))) ; 1
 (print (module/add-node! *factorial* (node/new-output 'factorial 'integer))) ; 2
