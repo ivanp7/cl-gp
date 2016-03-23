@@ -99,6 +99,26 @@
     ((or (type/top? source-type) (type/top? target-type)) t)
     (t (funcall (type/reducibility-test target-type) source-type))))
 
+;;; *** type class ***
+
+(defclass type-class (abstract-type)
+  ((print-info :accessor type-class/print-info
+               :initarg :print-info
+               :initform "")))
+
+(defmethod print-object ((instance type-class) st)
+  (print-unreadable-object (instance st :identity t)
+    (with-slots (print-info) instance
+      (format st "TYPE-CLASS ~S ~S" print-info))))
+
+(defun make-type-class (print-info reducibility-test &key properties)
+  (make-instance 'type-class :print-info print-info
+                 :reducibility-test reducibility-test
+                 :properties properties))
+
+(defun type/type-class? (type)
+  (typep type 'type-class))
+
 ;;; *** typed value ***
 
 (defclass typed-value ()
@@ -111,8 +131,9 @@
 
 (defmethod initialize-instance :after ((instance typed-value) &key)
   (with-slots (value-type) instance
-    (if (or (type/bottom? instance) (type/void? instance))
-        (error "TYPED-VALUE -- value cannot have bottom or void type"))))
+    (if (or (type/bottom? instance) (type/void? instance)
+           (type/type-class? instance) (type/top? instance))
+        (error "TYPED-VALUE -- value must have a specific type"))))
 
 (defmethod print-object ((instance typed-value) st)
   (print-unreadable-object (instance st)
@@ -181,7 +202,7 @@
                   (typed-value/reducible? source-arg target-arg))))
            (parametric-type/arguments source-type)
            (parametric-type/arguments target-type)))
-     (funcall (type/reducibility-test target-type) source-type)))
+     (call-next-method)))
 
 ;;; *** primitive type ***
 
@@ -208,7 +229,7 @@
 (defmethod type/reducible? ((source-type abstract-type) (target-type primitive-type))
   (or (and (type/primitive? source-type)
         (type-name-equal (type/name source-type) (type/name target-type)))
-     (funcall (type/reducibility-test target-type) source-type)))
+     (call-next-method)))
 
 ;;; *** record ***
 
@@ -280,7 +301,7 @@
                                                    (field/type target-field))))
                            (record/fields source-type)))
               (record/fields target-type))))
-     (funcall (type/reducibility-test target-type) source-type)))
+     (call-next-method)))
 
 ;;; *** function type ***
 
@@ -313,7 +334,7 @@
                          (function-type/argument target-type))
         (type/reducible? (function-type/result source-type)
                          (function-type/result target-type)))
-     (funcall (type/reducibility-test target-type) source-type)))
+     (call-next-method)))
 
 ;;; *** type properties ***
 
