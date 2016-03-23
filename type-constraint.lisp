@@ -19,7 +19,10 @@
                       :initform (constantly nil))
    (value-test :reader type/value-test
                :initarg :value-test
-               :initform *type/value-test*)))
+               :initform *type/value-test*)
+   (properties :accessor type/properties
+               :initarg :properties
+               :initform nil)))
 #|
 (defmethod initialize-instance :after ((instance abstract-type) &key)
   (if (alexandria:type= (type-of instance) 'abstract-type)
@@ -35,62 +38,11 @@
 (defgeneric type/reducible? (source-type target-type)
   (:documentation "Test if source-type can be reduced to target-type"))
 
-(defmethod type/reducible? ((source-type abstract-type) (target-type abstract-type))
-  (funcall (type/reducibility-test target-type) source-type))
-
 (defgeneric type/subtype (type part)
   (:documentation "Extract (select) a part subtype of type"))
 
 (defmethod type/subtype ((type abstract-type) part)
   (error "TYPE/SUBTYPE -- attempt to select subtype on a indivisible type"))
-
-
-
-(defmacro define-type-constant (constant-name kind &rest args)
-  `(alexandria:define-constant ,constant-name (make-instance ',kind ,@args)
-     :test #'(lambda (val1 val2)
-               (alexandria:type= (type-of val1)
-                                 (type-of val2)))))
-
-;;; *** top type ***
-
-(defclass top-type (abstract-type)
-  ())
-
-(defmethod print-object ((instance top-type) st)
-  (print-unreadable-object (instance st :identity t)
-    (format st "TOP-TYPE")))
-
-(defun type/top? (type)
-  (typep type 'top-type))
-
-(defmethod type/reducible? ((source-type abstract-type) (target-type top-type))
-  t)
-(defmethod type/reducible? ((source-type top-type) (target-type abstract-type))
-  t)
-
-(define-type-constant +top-type+ top-type)
-
-;;; *** void type ***
-
-(defclass void-type (abstract-type)
-  ())
-
-(defmethod print-object ((instance void-type) st)
-  (print-unreadable-object (instance st :identity t)
-    (format st "VOID-TYPE")))
-
-(defun type/void? (type)
-  (typep type 'void-type))
-
-(defmethod type/reducible? ((source-type void-type) (target-type void-type))
-  t)
-(defmethod type/reducible? ((source-type abstract-type) (target-type void-type))
-  nil)
-(defmethod type/reducible? ((source-type void-type) (target-type abstract-type))
-  nil)
-
-(define-type-constant +void-type+ void-type)
 
 ;;; *** bottom type ***
 
@@ -104,12 +56,48 @@
 (defun type/bottom? (type)
   (typep type 'bottom-type))
 
-(defmethod type/reducible? ((source-type abstract-type) (target-type bottom-type))
-  nil)
-(defmethod type/reducible? ((source-type bottom-type) (target-type abstract-type))
-  nil)
+(defparameter *bottom-type* bottom-type)
 
-(define-type-constant +bottom-type+ bottom-type)
+;;; *** void type ***
+
+(defclass void-type (abstract-type)
+  ())
+
+(defmethod print-object ((instance void-type) st)
+  (print-unreadable-object (instance st :identity t)
+    (format st "VOID-TYPE")))
+
+(defun type/void? (type)
+  (typep type 'void-type))
+
+(defparameter *void-type* void-type)
+
+;;; *** top type ***
+
+(defclass top-type (abstract-type)
+  ())
+
+(defmethod print-object ((instance top-type) st)
+  (print-unreadable-object (instance st :identity t)
+    (format st "TOP-TYPE")))
+
+(defun type/top? (type)
+  (typep type 'top-type))
+
+(defparameter *top-type* top-type)
+
+;;; *** reducibility test ***
+
+(defmethod type/reducible? ((source-type abstract-type) (target-type abstract-type))
+  (cond
+    ((or (type/bottom? source-type) (type/bottom? target-type)) nil)
+    ((type/void? target-type)
+     (if (type/void? source-type)
+         t
+         (funcall (type/reducibility-test target-type) source-type)))
+    ((type/void? source-type) nil)
+    ((or (type/top? source-type) (type/top? target-type)) t)
+    (t (funcall (type/reducibility-test target-type) source-type))))
 
 ;;; *** typed value ***
 
@@ -119,7 +107,12 @@
           :initform nil)
    (value-type :reader typed-value/type
                :initarg :type
-               :initform +top-type+)))
+               :initform *top-type*)))
+
+(defmethod initialize-instance :after ((instance typed-value) &key)
+  (with-slots (value-type) instance
+    (if (or (type/bottom? instance) (type/void? instance))
+        (error "TYPED-VALUE -- value cannot have bottom or void type"))))
 
 (defmethod print-object ((instance typed-value) st)
   (print-unreadable-object (instance st)
@@ -131,16 +124,6 @@
 
 (defun typed-value-object? (object)
   (typep object 'typed-value))
-
-
-
-(defgeneric type/value-reducible? (source-value source-type target-value target-type)
-  (:documentation "Test if source-value of source-type can be reduced to target-value of target-type"))
-
-(defmethod type/value-reducible? (source-value (source-type abstract-type)
-                                  target-value (target-type abstract-type))
-  (declare (ignore source-type target-type))
-  (equalp source-value target-value))
 
 (defun typed-value/reducible? (source-typed-value target-typed-value)
   (if (type/reducible? (typed-value/type source-typed-value)
@@ -168,7 +151,8 @@
 (declaim (ftype function make-primitive-type))
 
 (defun make-parametric-type (name arguments-list &key (reducibility-test (constantly nil))
-                                                   (value-test *type/value-test*))
+                                                   (value-test *type/value-test*)
+                                                   properties)
   (if (zerop (length arguments-list))
       (make-primitive-type name)
       (if (every #'(lambda (arg)
@@ -177,7 +161,7 @@
              arguments-list)
           (make-instance 'parametric-type :name name :arguments arguments-list
                          :reducibility-test reducibility-test
-                         :value-test value-test))))
+                         :value-test value-test :properties properties))))
 
 (defun type/parametric? (type)
   (typep type 'parametric-type))
@@ -213,9 +197,10 @@
       (format st "PRIMITIVE-TYPE ~S" name))))
 
 (defun make-primitive-type (name &key (reducibility-test (constantly nil))
-                                   (value-test *type/value-test*))
+                                   (value-test *type/value-test*)
+                                   properties)
   (make-instance 'type/primitive :name name :reducibility-test reducibility-test
-                 :value-test value-test))
+                 :value-test value-test :properties properties))
 
 (defun type/primitive? (type)
   (typep type 'primitive-type))
@@ -258,7 +243,7 @@
       (format st "RECORD ~S" fields))))
 
 (defun make-record (fields-list &key (reducibility-test (constantly nil))
-                                  (value-test *type/value-test*))
+                                  (value-test *type/value-test*) properties)
   (case (length fields-list)
     (0 +type/bottom+)
     (1 (field/type (first fields-list)))
@@ -268,7 +253,7 @@
                                          :test *field/name-test*)))
            (make-instance 'record :fields fields-list
                           :reducibility-test reducibility-test
-                          :value-test value-test)
+                          :value-test value-test :properties properties)
            (error "MAKE-RECORD -- record cannot have fields with identical names")))))
 
 (defun type/record? (type)
@@ -313,10 +298,11 @@
       (format st "FUNCTION-TYPE (~S -> ~S)" argument result))))
 
 (defun make-function-type (argument result &key (reducibility-test (constantly nil))
-                                             (value-test *type/value-test*))
+                                             (value-test *type/value-test*)
+                                             properties)
   (make-instance 'function-type :argument argument :result result
                  :reducibility-test reducibility-test
-                 :value-test value-test))
+                 :value-test value-test :properties properties))
 
 (defun type/function? (type)
   (typep type 'function-type))
