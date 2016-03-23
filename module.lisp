@@ -53,6 +53,10 @@
                    node graph)
           t))))
 
+(defun graph/add-nodes! (graph nodes)
+  (iterate:iter (for node in nodes)
+                (counting (graph/add-node! graph node))))
+
 (defun ~graph/signal-node-deletion-event (graph vertex)
   (let* ((deleted-node (element vertex))
          (deleted-id (node/id deleted-node)))
@@ -120,15 +124,15 @@
                                                      connections-order-fn)
     (let ((connections (edges->connections
                         (iterate:iter
-                          (for id in target-ids)
-                          (for vertex = (~graph/vertex graph id))
-                          (when vertex
-                            (nconcing (delete-if
-                                       #'(lambda (edge)
-                                           (member (node/id (element (source-vertex edge)))
-                                              target-ids
-                                              :test *node/id-test*))
-                                       (target-edges vertex)))))
+                         (for id in target-ids)
+                         (for vertex = (~graph/vertex graph id))
+                         (when vertex
+                           (nconcing (delete-if
+                                      #'(lambda (edge)
+                                          (member (node/id (element (source-vertex edge)))
+                                             target-ids
+                                             :test *node/id-test*))
+                                      (target-edges vertex)))))
                         except-world-connections)))
       (if (null connections-order-fn)
           connections
@@ -138,15 +142,15 @@
                                                       connections-order-fn)
     (let ((connections (edges->connections
                         (iterate:iter
-                          (for id in source-ids)
-                          (for vertex = (~graph/vertex graph id))
-                          (when vertex
-                            (nconcing (delete-if
-                                       #'(lambda (edge)
-                                           (member (node/id (element (target-vertex edge)))
-                                              source-ids
-                                              :test *node/id-test*))
-                                       (source-edges vertex)))))
+                         (for id in source-ids)
+                         (for vertex = (~graph/vertex graph id))
+                         (when vertex
+                           (nconcing (delete-if
+                                      #'(lambda (edge)
+                                          (member (node/id (element (target-vertex edge)))
+                                             source-ids
+                                             :test *node/id-test*))
+                                      (source-edges vertex)))))
                         except-world-connections)))
       (if (null connections-order-fn)
           connections
@@ -172,19 +176,19 @@
     (macrolet ((conn-macro (ids-var edges-fn)
                  `(edges->connections
                    (iterate:iter
-                     (for id in ,ids-var)
-                     (for vertex = (~graph/vertex graph id))
-                     (when vertex
-                       (nconcing
-                        (delete-if-not
-                         #'(lambda (edge)
-                             (and (member (node/id (element (source-vertex edge)))
-                                   source-ids
-                                   :test *node/id-test*)
-                                (member (node/id (element (target-vertex edge)))
-                                   target-ids
-                                   :test *node/id-test*)))
-                         (,edges-fn vertex)))))
+                    (for id in ,ids-var)
+                    (for vertex = (~graph/vertex graph id))
+                    (when vertex
+                      (nconcing
+                       (delete-if-not
+                        #'(lambda (edge)
+                            (and (member (node/id (element (source-vertex edge)))
+                                  source-ids
+                                  :test *node/id-test*)
+                               (member (node/id (element (target-vertex edge)))
+                                  target-ids
+                                  :test *node/id-test*)))
+                        (,edges-fn vertex)))))
                    except-world-connections)))
       (let ((connections
              (case collection-method
@@ -255,6 +259,12 @@
                  (element tgt-vertex) connection graph)
         t))))
 
+(defun graph/connect-set! (graph connections &key (constraint-fn
+                                                   *constraints-conjoint-function*))
+  (iterate:iter (for conn in connections)
+                (counting (graph/connect!
+                           graph conn :constraint-fn constraint-fn))))
+
 (defun graph/disconnect! (graph connection)
   (let ((edge (~graph/edge graph (connection/source-id connection)
                            (connection/target-id connection))))
@@ -277,6 +287,12 @@
             (delete-edge graph edge))
         t))))
 
+(defun graph/disconnect-set! (graph connections &key (constraint-fn
+                                                      *constraints-conjoint-function*))
+  (iterate:iter (for conn in connections)
+                (counting (graph/disconnect!
+                           graph conn :constraint-fn constraint-fn))))
+
 
 
 (defun graph/fitting-connection? (graph connection &key (constraint-fn
@@ -291,64 +307,62 @@
   (unless (graph/fitting-connection? graph connection :constraint-fn constraint-fn)
     (graph/disconnect! graph connection)))
 
-(defun graph/revise-related-connections! (graph ids &key (constraint-fn
+(defun graph/revise-connections! (graph connections &key (constraint-fn
                                                           *constraints-conjoint-function*))
-  (iterate:iter (for conn in (graph/related-connections graph ids))
+  (iterate:iter (for conn in connections)
                 (counting (graph/revise-connection!
                            graph conn :constraint-fn constraint-fn))))
+
+(defun graph/revise-related-connections! (graph ids &key (constraint-fn
+                                                          *constraints-conjoint-function*))
+  (graph/revise-connections! graph (graph/related-connections graph ids)
+                             :constraint-fn constraint-fn))
+
+(defun graph/revise-all-connections! (graph &key (constraint-fn
+                                                  *constraints-conjoint-function*))
+  (graph/revise-connections! graph (graph/all-connections graph)
+                             :constraint-fn constraint-fn))
 
 
 
 (defun graph/insert-subgraph! (graph subgraph)
   (let ((common-nodes-ids (mapcar #'node/id
-                                  (graph/all-nodes subgraph)))
-        (common-nodes-external-conn
-         (graph/external-connections graph common-nodes-ids)))
+                                  (graph/all-nodes subgraph))))
     (graph/delete-nodes! graph common-nodes-ids)
-    (dolist (node (graph/all-nodes subgraph))
-      (graph/add-node! graph node))
-    (dolist (conn (graph/all-connections subgraph))
-      (graph/connect! graph conn))
-    (dolist (conn common-nodes-external-conn)
-      (graph/connect! graph conn))
+    (graph/add-nodes! graph (graph/all-nodes subgraph))
+    (graph/connect-set! graph (graph/all-connections subgraph))
+    (graph/connect-set! graph (graph/external-connections graph common-nodes-ids))
     t))
 
 (defun graph/replace-nodes! (graph ids subgraph &key (input-conn-fn (constantly nil))
                                                   (output-conn-fn (constantly nil)))
-  (let ((input-conn (graph/input-connections graph ids))
-        (output-conn (graph/output-connections graph ids)))
+  (let ((input-connections (graph/input-connections graph ids))
+        (output-connections (graph/output-connections graph ids)))
     (graph/delete-nodes! graph ids)
     (graph/insert-subgraph! graph subgraph)
-    (dolist (conn (delete nil (mapcar input-conn-fn input-conn)))
-      (graph/connect! graph conn))
-    (dolist (conn (delete nil (mapcar output-conn-fn output-conn)))
-      (graph/connect! graph conn))
+    (graph/connect-set! graph (delete nil (mapcar input-conn-fn input-connections)))
+    (graph/connect-set! graph (delete nil (mapcar output-conn-fn output-connections)))
     t))
 
 
 
 (defun graph/make-graph (&optional nodes connections)
   (let ((graph (make-graph 'graph-container :default-edge-type :directed)))
-    (dolist (node nodes)
-      (graph/add-node! graph node))
-    (if nodes
-        (dolist (conn connections)
-          (graph/connect! graph conn)))
+    (graph/add-nodes! graph nodes)
+    (graph/connect-set! graph connections)
     graph))
 
 (defun graph/copy-graph (graph &key except-world-node)
-  (let* ((nodes
-          (mapcar #'copy-node
-                  (graph/all-nodes graph
-                                   :except-world-node except-world-node)))
-         (connections
-          (mapcar #'copy-connection
-                  (graph/all-connections graph
-                                         :except-world-connections except-world-node))))
+  (let* ((nodes (mapcar #'copy-node
+                        (graph/all-nodes
+                         graph :except-world-node except-world-node)))
+         (connections (mapcar #'copy-connection
+                              (graph/all-connections
+                               graph :except-world-connections except-world-node))))
     (graph/make-graph nodes connections)))
 
 (defun graph/copy-subgraph (graph ids)
-  (let* ((nodes (mapcar #'copy-genotype-node (graph/nodes graph ids)))
+  (let* ((nodes (mapcar #'copy-node (graph/nodes graph ids)))
          (existing-ids (mapcar #'node/id nodes))
          (connections (mapcar #'copy-connection
                               (graph/internal-connections graph existing-ids))))
