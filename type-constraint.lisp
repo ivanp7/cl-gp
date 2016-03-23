@@ -58,19 +58,19 @@
 
 (defparameter *bottom-type* bottom-type)
 
-;;; *** void type ***
+;;; *** unit type ***
 
-(defclass void-type (abstract-type)
+(defclass unit-type (abstract-type)
   ())
 
-(defmethod print-object ((instance void-type) st)
+(defmethod print-object ((instance unit-type) st)
   (print-unreadable-object (instance st :identity t)
-    (format st "VOID-TYPE")))
+    (format st "UNIT-TYPE")))
 
-(defun type/void? (type)
-  (typep type 'void-type))
+(defun type/unit? (type)
+  (typep type 'unit-type))
 
-(defparameter *void-type* void-type)
+(defparameter *unit-type* unit-type)
 
 ;;; *** top type ***
 
@@ -91,11 +91,11 @@
 (defmethod type/reducible? ((source-type abstract-type) (target-type abstract-type))
   (cond
     ((or (type/bottom? source-type) (type/bottom? target-type)) nil)
-    ((type/void? target-type)
-     (if (type/void? source-type)
+    ((type/unit? target-type)
+     (if (type/unit? source-type)
          t
          (funcall (type/reducibility-test target-type) source-type)))
-    ((type/void? source-type) nil)
+    ((type/unit? source-type) nil)
     ((or (type/top? source-type) (type/top? target-type)) t)
     (t (funcall (type/reducibility-test target-type) source-type))))
 
@@ -131,7 +131,7 @@
 
 (defmethod initialize-instance :after ((instance typed-value) &key)
   (with-slots (value-type) instance
-    (if (or (type/bottom? instance) (type/void? instance)
+    (if (or (type/bottom? instance) (type/unit? instance)
            (type/type-class? instance) (type/top? instance))
         (error "TYPED-VALUE -- value must have a specific type"))))
 
