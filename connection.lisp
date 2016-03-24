@@ -37,9 +37,22 @@
                    :initform (constantly ""))))
 
 (defmethod print-object ((instance object/arrow) st)
-  (print-unreadable-object (instance st :identity t)
-    (with-slots (properties print-function) instance
-      (format st "ARROW ~A" (funcall print-function properties)))))
+  (print-unreadable-object (instance st)
+    (with-slots (source-selector target-selector properties print-function) instance
+      (let ((info (funcall print-function properties)))
+        (format st (concatenate 'string
+                                "ARROW"
+                                (cond
+                                  ((and source-selector target-selector)
+                                   (format nil " SOURCE ~S TARGET ~S"
+                                           source-selector target-selector))
+                                  (source-selector
+                                   (format nil " SOURCE ~S" source-selector))
+                                  (target-selector
+                                   (format nil " TARGET ~S" target-selector))
+                                  (t ""))
+                                (if (plusp (length info)) " " "")
+                                info))))))
 
 (defun make-arrow (&key source-selector target-selector properties
                      (addition-to-graph-fn (constantly nil))
@@ -63,7 +76,7 @@
               :print-function (arrow/print-function arrow)))
 
 (defun arrow-equal (arrow1 arrow2)
-  (funcall *arrow/properties-test* (arrow/properties arrow1) (arrow/properties arrow)))
+  (funcall *arrow/properties-test* (arrow/properties arrow1) (arrow/properties arrow2)))
 
 ;;; *** connection ***
 
@@ -79,9 +92,9 @@
            :initform (error "CONNECTION -- :target parameter must be supplied"))))
 
 (defmethod print-object ((instance object/connection) st)
-  (print-unreadable-object (instance st :identity t)
+  (print-unreadable-object (instance st)
     (with-slots (arrow source target) instance
-      (format st "CONNECTION (~S -> ~S) ~S" source target arrow))))
+      (format st (format nil "CONNECTION (~S -> ~S) ~S" source target arrow)))))
 
 (defun make-connection (arrow source-id target-id)
   (make-instance 'object/connection
@@ -104,10 +117,10 @@
                   (connection/arrow conn2))))
 
 (defun connection/direction (connection id)
-  (let ((src-id (connection/source-id connection))
-        (src-id-equal (id-equal id src-id))
-        (tgt-id (connection/target-id connection))
-        (tgt-id-equal (id-equal id tgt-id)))
+  (let* ((src-id (connection/source-id connection))
+         (src-id-equal (id-equal id src-id))
+         (tgt-id (connection/target-id connection))
+         (tgt-id-equal (id-equal id tgt-id)))
     (cond
       ((and src-id-equal tgt-id-equal) (values :loop id))
       (tgt-id-equal (values :input src-id))

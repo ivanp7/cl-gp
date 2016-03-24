@@ -16,7 +16,7 @@
   (getf (node/properties node) :name))
 
 (defun module/name (module)
-  (getf (module/properties module) :name))
+  (getf (module/world-node-properties module) :name))
 
 (defun make-name-property (name)
   (make-properties :name name))

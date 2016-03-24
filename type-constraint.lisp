@@ -29,7 +29,7 @@
       (error "Abstract type object cannot be created")))
 |#
 (defmethod print-object ((instance abstract-type) st)
-  (print-unreadable-object (instance st :identity t)
+  (print-unreadable-object (instance st)
     (format st "ABSTRACT-TYPE")))
 
 (defun type-object? (object)
@@ -50,13 +50,13 @@
   ())
 
 (defmethod print-object ((instance bottom-type) st)
-  (print-unreadable-object (instance st :identity t)
+  (print-unreadable-object (instance st)
     (format st "BOTTOM-TYPE")))
 
 (defun type/bottom? (type)
   (typep type 'bottom-type))
 
-(defparameter *bottom-type* bottom-type)
+(defparameter *bottom-type* (make-instance 'bottom-type))
 
 ;;; *** unit type ***
 
@@ -64,13 +64,13 @@
   ())
 
 (defmethod print-object ((instance unit-type) st)
-  (print-unreadable-object (instance st :identity t)
+  (print-unreadable-object (instance st)
     (format st "UNIT-TYPE")))
 
 (defun type/unit? (type)
   (typep type 'unit-type))
 
-(defparameter *unit-type* unit-type)
+(defparameter *unit-type* (make-instance 'unit-type))
 
 ;;; *** top type ***
 
@@ -78,13 +78,13 @@
   ())
 
 (defmethod print-object ((instance top-type) st)
-  (print-unreadable-object (instance st :identity t)
+  (print-unreadable-object (instance st)
     (format st "TOP-TYPE")))
 
 (defun type/top? (type)
   (typep type 'top-type))
 
-(defparameter *top-type* top-type)
+(defparameter *top-type* (make-instance 'top-type))
 
 ;;; *** reducibility test ***
 
@@ -110,7 +110,7 @@
                :initform "")))
 
 (defmethod print-object ((instance union-type) st)
-  (print-unreadable-object (instance st :identity t)
+  (print-unreadable-object (instance st)
     (with-slots (name print-info) instance
       (format st "UNION-TYPE ~S ~S" name print-info))))
 
@@ -140,8 +140,9 @@
 
 (defmethod initialize-instance :after ((instance typed-value) &key)
   (with-slots (value-type) instance
-    (if (or (type/bottom? instance) (type/unit? instance)
-           (type/type-class? instance) (type/top? instance))
+    (if (or (type/bottom? instance)
+           (type/unit? instance)
+           (type/top? instance))
         (error "TYPED-VALUE -- value must have a specific type"))))
 
 (defmethod print-object ((instance typed-value) st)
@@ -230,7 +231,7 @@
 (defun make-primitive-type (name &key (reducibility-test (constantly nil))
                                    (value-test *type/value-test*)
                                    properties)
-  (make-instance 'type/primitive :name name :reducibility-test reducibility-test
+  (make-instance 'primitive-type :name name :reducibility-test reducibility-test
                  :value-test value-test :properties properties))
 
 (defun type/primitive? (type)
@@ -277,7 +278,7 @@
 (defun make-record (fields-list &key (reducibility-test (constantly nil))
                                   (value-test *type/value-test*) properties)
   (case (length fields-list)
-    (0 +type/bottom+)
+    (0 *bottom-type*)
     (1 (field/type (first fields-list)))
     (t (if (= (length fields-list)
               (length (remove-duplicates fields-list
@@ -350,8 +351,8 @@
 ;;; *** type properties ***
 
 (defun make-type-properties (&key input-type output-type)
-  (make-properties (nconc (if input-type (list :input-type input-type))
-                          (if output-type (list :output-type output-type)))))
+  (apply #'make-properties (nconc (if input-type (list :input-type input-type))
+                                  (if output-type (list :output-type output-type)))))
 
 (defun make-module-type-properties (&key input-type output-type)
   (make-type-properties :input-type output-type :output-type input-type))
@@ -359,16 +360,16 @@
 ;;; *** type readers ***
 
 (defun node/input-type (node)
-  (get-property (node/properties node) :input-type +type/bottom+))
+  (get-property (node/properties node) :input-type *bottom-type*))
 
 (defun node/output-type (node)
-  (get-property (node/properties node) :output-type +type/bottom+))
+  (get-property (node/properties node) :output-type *bottom-type*))
 
 (defun module/input-type (module)
-  (get-property (module/world-node-properties module) :output-type +type/bottom+))
+  (get-property (module/world-node-properties module) :output-type *bottom-type*))
 
 (defun module/output-type (module)
-  (get-property (module/world-node-properties module) :input-type +type/bottom+))
+  (get-property (module/world-node-properties module) :input-type *bottom-type*))
 
 ;;; *** type constraint ***
 
@@ -400,12 +401,6 @@
       (format nil "(~S <- ~S)"
               (getf plist :output-type)
               (getf plist :input-type))))
-
-(defparameter *type-constraint/arrow-print-function*
-  #'(lambda (plist)
-      (format nil "(~S -> ~S)"
-              (getf plist :source-type-selector)
-              (getf plist :target-type-selector))))
 
 (defparameter *type-constraint/module-print-function*
   #'(lambda (plist)

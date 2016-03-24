@@ -35,9 +35,13 @@
                    :initform (constantly ""))))
 
 (defmethod print-object ((instance object/node) st)
-  (print-unreadable-object (instance st :identity t)
+  (print-unreadable-object (instance st)
     (with-slots (id properties print-function) instance
-      (format st "NODE#~S ~A" id (funcall print-function properties)))))
+      (let ((info (funcall print-function properties)))
+        (format st (concatenate 'string
+                                (format nil "NODE[~S]" id)
+                                (if (plusp (length info)) " " "")
+                                info))))))
 
 (defun make-node (id &key properties
                        (addition-to-graph-fn (constantly nil))

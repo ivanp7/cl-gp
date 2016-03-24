@@ -1,5 +1,4 @@
 ;;;; package.lisp
 
 (defpackage #:cl-gp
-  (:use #:cl))
-
+  (:use #:cl #:iterate))
