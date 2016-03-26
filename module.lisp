@@ -4,20 +4,20 @@
 
 ;;; *** graph ***
 
-(defparameter *world-node-id* t)
+(defparameter *world-node-label* t)
 
 
 
-(defun ~graph/vertex (graph id)
-  (cl-graph:search-for-vertex graph id
+(defun ~graph/vertex (graph label)
+  (cl-graph:search-for-vertex graph label
                               :key #'(lambda (v)
-                                       (node/id (cl-graph:element v)))
-                              :test *node/id-test*
+                                       (node/label (cl-graph:element v)))
+                              :test *node/label-test*
                               :error-if-not-found? nil))
 
-(defun ~graph/edge (graph source-id target-id)
-  (let ((src-vertex (~graph/vertex graph source-id))
-        (tgt-vertex (~graph/vertex graph target-id)))
+(defun ~graph/edge (graph source-label target-label)
+  (let ((src-vertex (~graph/vertex graph source-label))
+        (tgt-vertex (~graph/vertex graph target-label)))
     (if (and src-vertex tgt-vertex)
         (values (cl-graph:find-edge-between-vertexes
                  graph src-vertex tgt-vertex :error-if-not-found? nil)
@@ -31,22 +31,22 @@
     (if (null except-world-node)
         nodes
         (delete-if #'(lambda (node)
-                       (id-equal (node/id node)
-                                 *world-node-id*))
+                       (label-equal (node/label node)
+                                    *world-node-label*))
                    nodes))))
 
-(defun graph/node (graph id)
-  (let ((vertex (~graph/vertex graph id)))
+(defun graph/node (graph label)
+  (let ((vertex (~graph/vertex graph label)))
     (if vertex (cl-graph:element vertex))))
 
-(defun graph/nodes (graph ids)
-  (delete nil (mapcar #'(lambda (id)
-                        (graph/node graph id))
-                    ids)))
+(defun graph/nodes (graph labels-list)
+  (delete nil (mapcar #'(lambda (label)
+                        (graph/node graph label))
+                    labels-list)))
 
 (defun graph/add-node! (graph node)
   (if node
-      (let ((vertex (~graph/vertex graph (node/id node))))
+      (let ((vertex (~graph/vertex graph (node/label node))))
         (when (null vertex)
           (cl-graph:add-vertex graph node)
           (funcall (node/addition-to-graph-event-handler node)
@@ -59,14 +59,14 @@
 
 (defun ~graph/signal-node-deletion-event (graph vertex)
   (let* ((deleted-node (cl-graph:element vertex))
-         (deleted-id (node/id deleted-node)))
+         (deleted-label (node/label deleted-node)))
     (cl-graph:iterate-source-edges
      vertex
      #'(lambda (edge)
          (let* ((source-node (cl-graph:element (cl-graph:source-vertex edge)))
-                (source-id (node/id source-node)))
+                (source-label (node/label source-node)))
            (dolist (arrow (cl-graph:element edge))
-             (let ((conn (make-connection arrow source-id deleted-id)))
+             (let ((conn (make-connection arrow source-label deleted-label)))
                (funcall (arrow/deletion-from-graph-event-handler arrow)
                         conn graph)
                (funcall (node/loss-of-connection-event-handler source-node)
@@ -75,9 +75,9 @@
      vertex
      #'(lambda (edge)
          (let* ((target-node (cl-graph:element (cl-graph:target-vertex edge)))
-                (target-id (node/id target-node)))
+                (target-label (node/label target-node)))
            (dolist (arrow (cl-graph:element edge))
-             (let ((conn (make-connection arrow deleted-id target-id)))
+             (let ((conn (make-connection arrow deleted-label target-label)))
                (funcall (arrow/deletion-from-graph-event-handler arrow)
                         conn graph)
                (funcall (node/loss-of-connection-event-handler target-node)
@@ -85,16 +85,16 @@
     (funcall (node/deletion-from-graph-event-handler deleted-node)
              deleted-node graph)))
 
-(defun graph/delete-node! (graph id)
-  (let ((vertex (~graph/vertex graph id)))
+(defun graph/delete-node! (graph label)
+  (let ((vertex (~graph/vertex graph label)))
     (when vertex
       (~graph/signal-node-deletion-event graph vertex)
       (cl-graph:delete-vertex graph vertex)
       t)))
 
-(defun graph/delete-nodes! (graph ids)
-  (iterate:iter (for id in ids)
-                (counting (graph/delete-node! graph id))))
+(defun graph/delete-nodes! (graph labels-list)
+  (iterate:iter (for label in labels-list)
+                (counting (graph/delete-node! graph label))))
 
 
 
@@ -106,116 +106,117 @@
                             (mapcar #'(lambda (,arrow)
                                         (make-connection
                                          ,arrow
-                                         (node/id (cl-graph:element
-                                                   (cl-graph:source-vertex ,edge)))
-                                         (node/id (cl-graph:element
-                                                   (cl-graph:target-vertex ,edge)))))
+                                         (node/label (cl-graph:element
+                                                      (cl-graph:source-vertex ,edge)))
+                                         (node/label (cl-graph:element
+                                                      (cl-graph:target-vertex ,edge)))))
                                     (cl-graph:element ,edge)))
                         ,edges-sexp)))
                   (if (not ,except-world-var)
                       ,connections
                       (delete-if #'(lambda (,conn)
-                                     (or (id-equal (connection/source-id ,conn)
-                                                  *world-node-id*)
-                                        (id-equal (connection/target-id ,conn)
-                                                  *world-node-id*)))
+                                     (or (label-equal (connection/source-label ,conn)
+                                                     *world-node-label*)
+                                        (label-equal (connection/target-label ,conn)
+                                                     *world-node-label*)))
                                  ,connections))))))
 
-  (defun graph/input-connections (graph target-ids &key except-world-connections
-                                                     connections-order-fn)
+  (defun graph/input-connections (graph target-labels &key except-world-connections
+                                                        connections-order-fn)
     (let ((connections (edges->connections
                         (iterate:iter
-                          (for id in target-ids)
-                          (for vertex = (~graph/vertex graph id))
+                          (for label in target-labels)
+                          (for vertex = (~graph/vertex graph label))
                           (when vertex
                             (nconcing (delete-if
                                        #'(lambda (edge)
-                                           (member (node/id (cl-graph:element (cl-graph:source-vertex edge)))
-                                              target-ids
-                                              :test *node/id-test*))
+                                           (member (node/label (cl-graph:element (cl-graph:source-vertex edge)))
+                                              target-labels
+                                              :test *node/label-test*))
                                        (cl-graph:target-edges vertex)))))
                         except-world-connections)))
       (if (null connections-order-fn)
           connections
           (sort connections connections-order-fn))))
 
-  (defun graph/output-connections (graph source-ids &key except-world-connections
-                                                      connections-order-fn)
+  (defun graph/output-connections (graph source-labels &key except-world-connections
+                                                         connections-order-fn)
     (let ((connections (edges->connections
                         (iterate:iter
-                          (for id in source-ids)
-                          (for vertex = (~graph/vertex graph id))
+                          (for label in source-labels)
+                          (for vertex = (~graph/vertex graph label))
                           (when vertex
                             (nconcing (delete-if
                                        #'(lambda (edge)
-                                           (member (node/id (cl-graph:element (cl-graph:target-vertex edge)))
-                                              source-ids
-                                              :test *node/id-test*))
+                                           (member (node/label (cl-graph:element
+                                                           (cl-graph:target-vertex edge)))
+                                              source-labels
+                                              :test *node/label-test*))
                                        (cl-graph:source-edges vertex)))))
                         except-world-connections)))
       (if (null connections-order-fn)
           connections
           (sort connections connections-order-fn))))
 
-  (defun graph/external-connections (graph ids &key except-world-connections
-                                                 connections-order-fn)
+  (defun graph/external-connections (graph labels-list &key except-world-connections
+                                                         connections-order-fn)
     (let ((connections (nconc (graph/input-connections
-                               graph ids
+                               graph labels-list
                                :except-world-connections except-world-connections
                                :connections-order-fn connections-order-fn)
                               (graph/output-connections
-                               graph ids
+                               graph labels-list
                                :except-world-connections except-world-connections
                                :connections-order-fn connections-order-fn))))
       (if (null connections-order-fn)
           connections
           (sort connections connections-order-fn))))
 
-  (defun graph/connections (graph source-ids target-ids &key except-world-connections
-                                                          connections-order-fn
-                                                          collection-method)
-    (macrolet ((conn-macro (ids-var edges-fn)
+  (defun graph/connections (graph source-labels target-labels &key except-world-connections
+                                                                connections-order-fn
+                                                                collection-method)
+    (macrolet ((conn-macro (labels-var edges-fn)
                  `(edges->connections
                    (iterate:iter
-                     (for id in ,ids-var)
-                     (for vertex = (~graph/vertex graph id))
+                     (for label in ,labels-var)
+                     (for vertex = (~graph/vertex graph label))
                      (when vertex
                        (nconcing
                         (delete-if-not
                          #'(lambda (edge)
-                             (and (member (node/id (cl-graph:element (cl-graph:source-vertex edge)))
-                                   source-ids
-                                   :test *node/id-test*)
-                                (member (node/id (cl-graph:element (cl-graph:target-vertex edge)))
-                                   target-ids
-                                   :test *node/id-test*)))
+                             (and (member (node/label (cl-graph:element (cl-graph:source-vertex edge)))
+                                   source-labels
+                                   :test *node/label-test*)
+                                (member (node/label (cl-graph:element (cl-graph:target-vertex edge)))
+                                   target-labels
+                                   :test *node/label-test*)))
                          (,edges-fn vertex)))))
                    except-world-connections)))
       (let ((connections
              (case collection-method
-               (:source (conn-macro source-ids cl-graph:source-edges))
-               (:target (conn-macro target-ids cl-graph:target-edges))
+               (:source (conn-macro source-labels cl-graph:source-edges))
+               (:target (conn-macro target-labels cl-graph:target-edges))
                (t (alexandria:whichever
-                   (conn-macro source-ids cl-graph:source-edges)
-                   (conn-macro target-ids cl-graph:target-edges))))))
+                   (conn-macro source-labels cl-graph:source-edges)
+                   (conn-macro target-labels cl-graph:target-edges))))))
         (if (null connections-order-fn)
             connections
             (sort connections connections-order-fn)))))
 
-  (defun graph/internal-connections (graph ids &key except-world-connections
-                                                 connections-order-fn)
-    (graph/connections graph ids ids
+  (defun graph/internal-connections (graph labels-list &key except-world-connections
+                                                         connections-order-fn)
+    (graph/connections graph labels-list labels-list
                        :except-world-connections except-world-connections
                        :connections-order-fn connections-order-fn))
 
-  (defun graph/related-connections (graph ids &key except-world-connections
-                                                connections-order-fn)
+  (defun graph/related-connections (graph labels-list &key except-world-connections
+                                                        connections-order-fn)
     (let ((connections (nconc (graph/internal-connections
-                               graph ids
+                               graph labels-list
                                :except-world-connections except-world-connections
                                :connections-order-fn connections-order-fn)
                               (graph/external-connections
-                               graph ids
+                               graph labels-list
                                :except-world-connections except-world-connections
                                :connections-order-fn connections-order-fn))))
       (if (null connections-order-fn)
@@ -233,8 +234,8 @@
 
 
 (defun graph/matching-connection-exist? (graph connection)
-  (let ((edge (~graph/edge graph (connection/source-id connection)
-                           (connection/target-id connection))))
+  (let ((edge (~graph/edge graph (connection/source-label connection)
+                           (connection/target-label connection))))
     (if edge
         (not (null (member (connection/arrow connection)
                     (cl-graph:element edge)
@@ -243,8 +244,8 @@
 (defun graph/connect! (graph connection &key (constraint-fn
                                               *constraints-conjoint-function*))
   (multiple-value-bind (edge src-vertex tgt-vertex)
-      (~graph/edge graph (connection/source-id connection)
-                   (connection/target-id connection))
+      (~graph/edge graph (connection/source-label connection)
+                   (connection/target-label connection))
     (when (and (and src-vertex tgt-vertex)
              (funcall constraint-fn (cl-graph:element src-vertex) (cl-graph:element tgt-vertex)
                       (connection/arrow connection) graph))
@@ -268,8 +269,8 @@
                                           :constraint-fn constraint-fn))))
 
 (defun graph/disconnect! (graph connection)
-  (let ((edge (~graph/edge graph (connection/source-id connection)
-                           (connection/target-id connection))))
+  (let ((edge (~graph/edge graph (connection/source-label connection)
+                           (connection/target-label connection))))
     (when (and edge (member (connection/arrow connection)
                      (cl-graph:element edge)
                      :test #'arrow-equal))
@@ -298,8 +299,8 @@
 
 (defun graph/fitting-connection? (graph connection &key (constraint-fn
                                                          *constraints-conjoint-function*))
-  (let ((source-node (graph/node graph (connection/source-id connection)))
-        (target-node (graph/node graph (connection/target-id connection))))
+  (let ((source-node (graph/node graph (connection/source-label connection)))
+        (target-node (graph/node graph (connection/target-label connection))))
     (if (and source-node target-node)
         (funcall constraint-fn
                  source-node target-node
@@ -316,9 +317,9 @@
                 (counting (graph/revise-connection!
                            graph conn :constraint-fn constraint-fn))))
 
-(defun graph/revise-related-connections! (graph ids &key (constraint-fn
-                                                          *constraints-conjoint-function*))
-  (graph/revise-connections! graph (graph/related-connections graph ids)
+(defun graph/revise-related-connections! (graph labels-list &key (constraint-fn
+                                                                  *constraints-conjoint-function*))
+  (graph/revise-connections! graph (graph/related-connections graph labels-list)
                              :constraint-fn constraint-fn))
 
 (defun graph/revise-all-connections! (graph &key (constraint-fn
@@ -329,19 +330,21 @@
 
 
 (defun graph/insert-subgraph! (graph subgraph)
-  (let ((common-nodes-ids (mapcar #'node/id
-                                  (graph/all-nodes subgraph))))
-    (graph/delete-nodes! graph common-nodes-ids)
+  (let* ((common-nodes-labels (mapcar #'node/label
+                                      (graph/all-nodes subgraph)))
+         (external-common-nodes-conn
+          (graph/external-connections graph common-nodes-labels)))
+    (graph/delete-nodes! graph common-nodes-labels)
     (graph/add-nodes! graph (graph/all-nodes subgraph))
     (graph/connect-set! graph (graph/all-connections subgraph))
-    (graph/connect-set! graph (graph/external-connections graph common-nodes-ids))
+    (graph/connect-set! graph external-common-nodes-conn)
     t))
 
-(defun graph/replace-nodes! (graph ids subgraph &key (input-conn-fn (constantly nil))
-                                                  (output-conn-fn (constantly nil)))
-  (let ((input-connections (graph/input-connections graph ids))
-        (output-connections (graph/output-connections graph ids)))
-    (graph/delete-nodes! graph ids)
+(defun graph/replace-nodes! (graph labels-list subgraph &key (input-conn-fn #'identity)
+                                                          (output-conn-fn #'identity))
+  (let ((input-connections (graph/input-connections graph labels-list))
+        (output-connections (graph/output-connections graph labels-list)))
+    (graph/delete-nodes! graph labels-list)
     (graph/insert-subgraph! graph subgraph)
     (graph/connect-set! graph (delete nil (mapcar input-conn-fn input-connections)))
     (graph/connect-set! graph (delete nil (mapcar output-conn-fn output-connections)))
@@ -364,11 +367,11 @@
                                graph :except-world-connections except-world-node))))
     (graph/make-graph nodes connections)))
 
-(defun graph/copy-subgraph (graph ids)
-  (let* ((nodes (mapcar #'copy-node (graph/nodes graph ids)))
-         (existing-ids (mapcar #'node/id nodes))
+(defun graph/copy-subgraph (graph labels-list)
+  (let* ((nodes (mapcar #'copy-node (graph/nodes graph labels-list)))
+         (existing-labels (mapcar #'node/label nodes))
          (connections (mapcar #'copy-connection
-                              (graph/internal-connections graph existing-ids))))
+                              (graph/internal-connections graph existing-labels))))
     (graph/make-graph nodes connections)))
 
 ;;; *** module ***
@@ -387,9 +390,12 @@
 (defmethod print-object ((instance object/module) st)
   (print-unreadable-object (instance st)
     (with-slots (print-function) instance
-      (format st "MODULE ~A"
-              (funcall print-function
-                       (module/world-node-properties instance))))))
+      (let ((info (funcall print-function
+                           (module/world-node-properties instance))))
+        (format st (concatenate 'string
+                                "MODULE"
+                                (if (plusp (length info)) " " "")
+                                info))))))
 
 (defun make-module (&key wn-properties
                       (wn-addition-to-graph-fn (constantly nil))
@@ -402,7 +408,7 @@
                                               *module/print-functions-list*)))
   (make-instance 'object/module
                  :graph (graph/make-graph
-                         (list (make-node *world-node-id*
+                         (list (make-node *world-node-label*
                                           :properties wn-properties
                                           :addition-to-graph-fn wn-addition-to-graph-fn
                                           :deletion-from-graph-fn wn-deletion-from-graph-fn
@@ -417,9 +423,9 @@
                  :print-function (module/print-function module)))
 
 (defun module/world-node (module)
-  (graph/node (module/graph module) *world-node-id*))
+  (graph/node (module/graph module) *world-node-label*))
 
 (defun module/world-node-properties (module)
-  (let ((world-node (graph/node (module/graph module) *world-node-id*)))
+  (let ((world-node (graph/node (module/graph module) *world-node-label*)))
     (if world-node
         (node/properties world-node))))

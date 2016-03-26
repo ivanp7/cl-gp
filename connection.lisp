@@ -84,47 +84,47 @@
   ((arrow :accessor connection/arrow
           :initarg :arrow
           :initform (error "CONNECTION -- :arrow parameter must be supplied"))
-   (source :accessor connection/source-id
+   (source :accessor connection/source-label
            :initarg :source
            :initform (error "CONNECTION -- :source parameter must be supplied"))
-   (target :accessor connection/target-id
+   (target :accessor connection/target-label
            :initarg :target
            :initform (error "CONNECTION -- :target parameter must be supplied"))))
 
 (defmethod print-object ((instance object/connection) st)
   (print-unreadable-object (instance st)
     (with-slots (arrow source target) instance
-      (format st (format nil "CONNECTION (~S -> ~S) ~S" source target arrow)))))
+      (format st (format nil "CONNECTION [~S]->[~S] ~S" source target arrow)))))
 
-(defun make-connection (arrow source-id target-id)
+(defun make-connection (arrow source-label target-label)
   (make-instance 'object/connection
                  :arrow arrow
-                 :source source-id
-                 :target target-id))
+                 :source source-label
+                 :target target-label))
 
 (defun copy-connection (connection)
   (make-connection
    (copy-arrow (connection/arrow connection))
-   (connection/source-id connection)
-   (connection/target-id connection)))
+   (connection/source-label connection)
+   (connection/target-label connection)))
 
 (defun connection-equal (conn1 conn2)
-  (and (id-equal (connection/source-id conn1)
-               (connection/source-id conn2))
-     (id-equal (connection/target-id conn1)
-               (connection/target-id conn2))
+  (and (label-equal (connection/source-label conn1)
+                  (connection/source-label conn2))
+     (label-equal (connection/target-label conn1)
+                  (connection/target-label conn2))
      (arrow-equal (connection/arrow conn1)
                   (connection/arrow conn2))))
 
-(defun connection/direction (connection id)
-  (let* ((src-id (connection/source-id connection))
-         (src-id-equal (id-equal id src-id))
-         (tgt-id (connection/target-id connection))
-         (tgt-id-equal (id-equal id tgt-id)))
+(defun connection/direction (connection label)
+  (let* ((src-label (connection/source-label connection))
+         (src-label-equal (label-equal label src-label))
+         (tgt-label (connection/target-label connection))
+         (tgt-label-equal (label-equal label tgt-label)))
     (cond
-      ((and src-id-equal tgt-id-equal) (values :loop id))
-      (tgt-id-equal (values :input src-id))
-      (src-id-equal (values :output tgt-id))
+      ((and src-label-equal tgt-label-equal) (values :loop label))
+      (tgt-label-equal (values :input src-label))
+      (src-label-equal (values :output tgt-label))
       (t (values nil nil)))))
 
 (defun direction/loop? (dir)

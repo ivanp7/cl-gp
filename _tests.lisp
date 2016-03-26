@@ -14,7 +14,12 @@
 
 (defparameter *boolean-type* (make-primitive-type 'boolean))
 
-(defparameter *integer-type* (make-primitive-type 'integer))
+(defparameter *integer-type*
+  (make-primitive-type 'integer
+                       :reducibility-test ;;; temporary
+                       #'(lambda (type)
+                           (and (type/primitive? type)
+                              (type-name-equal (primitive-type/name type) 'number)))))
 (defparameter *number-type*
   (make-primitive-type 'number
                        :reducibility-test
@@ -58,8 +63,8 @@
             :setting-of-connection-fn
             (make-sequence-function
              (list #|#'(lambda (node connection graph)
-              (multiple-value-bind (direction id)
-              (connection/other-id connection 1)
+              (multiple-value-bind (direction label)
+              (connection/other-label connection 1)
               (if (or (direction/input? direction)
               (direction/loop? direction))
               )))|#))
@@ -105,8 +110,8 @@
             :setting-of-connection-fn
             (make-sequence-function
              (list #|#'(lambda (node connection graph)
-              (multiple-value-bind (direction id)
-              (connection/other-id connection 1)
+              (multiple-value-bind (direction label)
+              (connection/other-label connection 1)
               (if (or (direction/input? direction)
               (direction/loop? direction))
               )))|#))
@@ -127,7 +132,7 @@
 
 (graph/connect!
  (module/graph *factorial*)
- (make-connection (make-arrow) 1 *world-node-id*))
+ (make-connection (make-arrow) 1 *world-node-label*))
 
 (graph/connect!
  (module/graph *factorial*)
@@ -135,7 +140,7 @@
 
 (graph/connect!
  (module/graph *factorial*)
- (make-connection (make-arrow) *world-node-id* 3))
+ (make-connection (make-arrow) *world-node-label* 3))
 
 (graph/connect!
  (module/graph *factorial*)
@@ -147,7 +152,7 @@
 
 (graph/connect!
  (module/graph *factorial*)
- (make-connection (make-arrow :target-selector '(arg1)) *world-node-id* 4))
+ (make-connection (make-arrow :target-selector '(arg1)) *world-node-label* 4))
 
 (graph/connect!
  (module/graph *factorial*)
@@ -159,4 +164,4 @@
 
 (graph/connect!
  (module/graph *factorial*)
- (make-connection (make-arrow) *world-node-id* 6))
+ (make-connection (make-arrow) *world-node-label* 6))
