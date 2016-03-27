@@ -6,6 +6,9 @@
 
 (defparameter *world-node-label* t)
 
+(defun world-node-label? (label)
+  (label-equal label *world-node-label*))
+
 
 
 (defun ~graph/vertex (graph label)
@@ -31,8 +34,7 @@
     (if (null except-world-node)
         nodes
         (delete-if #'(lambda (node)
-                       (label-equal (node/label node)
-                                    *world-node-label*))
+                       (world-node-label? (node/label node)))
                    nodes))))
 
 (defun graph/node (graph label)
@@ -44,13 +46,31 @@
                         (graph/node graph label))
                     labels-list)))
 
+(defun graph/node-input-neighbours (graph label)
+  (let ((vertex (~graph/vertex graph label)))
+    (if vertex (mapcar #'cl-graph:element
+                       (cl-graph:parent-vertexes vertex)))))
+
+(defun graph/node-output-neighbours (graph label)
+  (let ((vertex (~graph/vertex graph label)))
+    (if vertex (mapcar #'cl-graph:element
+                       (cl-graph:child-vertexes vertex)))))
+
+(defun graph/node-neighbours (graph label)
+  (let ((vertex (~graph/vertex graph label)))
+    (if vertex (mapcar #'cl-graph:element
+                       (cl-graph:neighbor-vertexes vertex)))))
+
+
+
 (defun graph/add-node! (graph node)
   (if node
       (let ((vertex (~graph/vertex graph (node/label node))))
         (when (null vertex)
           (cl-graph:add-vertex graph node)
-          (funcall (node/addition-to-graph-event-handler node)
-                   node graph)
+          (funcall (node/events-handler-function node)
+                   node :on-addition-to-graph
+                   :graph graph)
           t))))
 
 (defun graph/add-nodes! (graph nodes)
@@ -67,10 +87,12 @@
                 (source-label (node/label source-node)))
            (dolist (arrow (cl-graph:element edge))
              (let ((conn (make-connection arrow source-label deleted-label)))
-               (funcall (arrow/deletion-from-graph-event-handler arrow)
-                        conn graph)
-               (funcall (node/loss-of-connection-event-handler source-node)
-                        source-node conn graph))))))
+               (funcall (arrow/events-handler-function arrow)
+                        conn :on-deletion-from-graph
+                        :connection conn :graph graph)
+               (funcall (node/events-handler-function source-node)
+                        source-node :on-loss-of-connection
+                        :connection conn :graph graph))))))
     (cl-graph:iterate-target-edges
      vertex
      #'(lambda (edge)
@@ -78,12 +100,15 @@
                 (target-label (node/label target-node)))
            (dolist (arrow (cl-graph:element edge))
              (let ((conn (make-connection arrow deleted-label target-label)))
-               (funcall (arrow/deletion-from-graph-event-handler arrow)
-                        conn graph)
-               (funcall (node/loss-of-connection-event-handler target-node)
-                        target-node conn graph))))))
-    (funcall (node/deletion-from-graph-event-handler deleted-node)
-             deleted-node graph)))
+               (funcall (arrow/events-handler-function arrow)
+                        conn :on-deletion-from-graph
+                        :connection conn :graph graph)
+               (funcall (node/events-handler-function target-node)
+                        target-node :on-loss-of-connection
+                        :connection conn :graph graph))))))
+    (funcall (node/events-handler-function deleted-node)
+             deleted-node :on-deletion-from-graph
+             :graph graph)))
 
 (defun graph/delete-node! (graph label)
   (let ((vertex (~graph/vertex graph label)))
@@ -115,10 +140,8 @@
                   (if (not ,except-world-var)
                       ,connections
                       (delete-if #'(lambda (,conn)
-                                     (or (label-equal (connection/source-label ,conn)
-                                                     *world-node-label*)
-                                        (label-equal (connection/target-label ,conn)
-                                                     *world-node-label*)))
+                                     (or (world-node-label? (connection/source-label ,conn))
+                                        (world-node-label? (connection/target-label ,conn))))
                                  ,connections))))))
 
   (defun graph/input-connections (graph target-labels &key except-world-connections
@@ -130,7 +153,8 @@
                           (when vertex
                             (nconcing (delete-if
                                        #'(lambda (edge)
-                                           (member (node/label (cl-graph:element (cl-graph:source-vertex edge)))
+                                           (member (node/label (cl-graph:element
+                                                           (cl-graph:source-vertex edge)))
                                               target-labels
                                               :test *node/label-test*))
                                        (cl-graph:target-edges vertex)))))
@@ -254,12 +278,15 @@
             (cl-graph:add-edge-between-vertexes
              graph src-vertex tgt-vertex :value (list arrow))
             (pushnew arrow (cl-graph:element edge) :test #'arrow-equal))
-        (funcall (arrow/addition-to-graph-event-handler arrow)
-                 connection graph)
-        (funcall (node/setting-of-connection-event-handler (cl-graph:element src-vertex))
-                 (cl-graph:element src-vertex) connection graph)
-        (funcall (node/setting-of-connection-event-handler (cl-graph:element tgt-vertex))
-                 (cl-graph:element tgt-vertex) connection graph)
+        (funcall (arrow/events-handler-function arrow)
+                 connection :on-addition-to-graph
+                 :graph graph)
+        (funcall (node/events-handler-function (cl-graph:element src-vertex))
+                 (cl-graph:element src-vertex) :on-setting-of-connection
+                 :connection connection :graph graph)
+        (funcall (node/events-handler-function (cl-graph:element tgt-vertex))
+                 (cl-graph:element tgt-vertex) :on-setting-of-connection
+                 :connection connection :graph graph)
         t))))
 
 (defun graph/connect-set! (graph connections &key (constraint-fn
@@ -276,13 +303,15 @@
                      :test #'arrow-equal))
       (let ((src-vertex (cl-graph:source-vertex edge))
             (tgt-vertex (cl-graph:target-vertex edge)))
-        (funcall (arrow/deletion-from-graph-event-handler
-                  (connection/arrow connection))
-                 connection graph)
-        (funcall (node/loss-of-connection-event-handler (cl-graph:element src-vertex))
-                 (cl-graph:element src-vertex) connection graph)
-        (funcall (node/loss-of-connection-event-handler (cl-graph:element tgt-vertex))
-                 (cl-graph:element tgt-vertex) connection graph)
+        (funcall (arrow/events-handler-function (connection/arrow connection))
+                 connection :on-deletion-from-graph
+                 :graph graph)
+        (funcall (node/events-handler-function (cl-graph:element src-vertex))
+                 (cl-graph:element src-vertex) :on-loss-of-connection
+                 :connection connection :graph graph)
+        (funcall (node/events-handler-function (cl-graph:element tgt-vertex))
+                 (cl-graph:element tgt-vertex) :on-loss-of-connection
+                 :connection connection :graph graph)
         (setf (cl-graph:element edge)
            (delete (connection/arrow connection)
                    (cl-graph:element edge)
@@ -383,6 +412,8 @@
   ((graph :reader module/graph
           :initarg :graph
           :initform (error "MODULE -- :graph parameter must be supplied"))
+   (associated-nodes :reader module/associated-nodes
+                     :initform (make-hash-table))
    (print-function :accessor module/print-function
                    :initarg :print-function
                    :initform (constantly ""))))
@@ -398,10 +429,7 @@
                                 info))))))
 
 (defun make-module (&key wn-properties
-                      (wn-addition-to-graph-fn (constantly nil))
-                      (wn-deletion-from-graph-fn (constantly nil))
-                      (wn-setting-of-connection-fn (constantly nil))
-                      (wn-loss-of-connection-fn (constantly nil))
+                      (wn-events-handler-fn (constantly nil))
                       (wn-print-function (make-conjoint-print-function
                                           *world-node/print-functions-list*))
                       (module-print-function (make-conjoint-print-function
@@ -410,10 +438,7 @@
                  :graph (graph/make-graph
                          (list (make-node *world-node-label*
                                           :properties wn-properties
-                                          :addition-to-graph-fn wn-addition-to-graph-fn
-                                          :deletion-from-graph-fn wn-deletion-from-graph-fn
-                                          :setting-of-connection-fn wn-setting-of-connection-fn
-                                          :loss-of-connection-fn wn-loss-of-connection-fn
+                                          :events-handler-fn wn-events-handler-fn
                                           :print-function wn-print-function)))
                  :print-function module-print-function))
 
@@ -429,3 +454,30 @@
   (let ((world-node (graph/node (module/graph module) *world-node-label*)))
     (if world-node
         (node/properties world-node))))
+
+
+
+(defun associate-node-with-module (node module)
+  (when (node/primitive? node)
+    (setf (slot-value node 'module) module)
+    (setf (gethash node (slot-value module 'associated-nodes)) t)
+    (funcall (node/events-handler-function node) node :on-association)
+    (graph/revise-related-connections! (module/graph module)
+                                       (list (node/label node)))
+    t))
+
+(defun unassociate-node (node)
+  (when (node/module-associated? node)
+    (with-slots (module) node
+      (let ((module-object module))
+        (remhash node (slot-value module 'associated-nodes))
+        (setf module nil)
+        (funcall (node/events-handler-function node) node :on-unassociation)
+        (graph/revise-related-connections! (module/graph module-object)
+                                           (list (node/label node))))
+      t)))
+
+(defun copy-module-node (node)
+  (let ((new-node (copy-primitive-node node)))
+    (associate-node-with-module new-node (node/associated-module node))
+    new-node))

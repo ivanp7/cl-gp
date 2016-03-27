@@ -26,12 +26,9 @@
    (properties :accessor arrow/properties
                :initarg :properties
                :initform nil)
-   (addition-to-graph-fn :accessor arrow/addition-to-graph-event-handler
-                         :initarg :addition-to-graph-fn
-                         :initform (constantly nil))
-   (deletion-from-graph-fn :accessor arrow/deletion-from-graph-event-handler
-                           :initarg :deletion-from-graph-fn
-                           :initform (constantly nil))
+   (events-handler-fn :accessor arrow/events-handler-function
+                      :initarg :events-handler-fn
+                      :initform (constantly nil))
    (print-function :accessor arrow/print-function
                    :initarg :print-function
                    :initform (constantly ""))))
@@ -55,24 +52,21 @@
                                 info))))))
 
 (defun make-arrow (&key source-selector target-selector properties
-                     (addition-to-graph-fn (constantly nil))
-                     (deletion-from-graph-fn (constantly nil))
+                     (events-handler-fn (constantly nil))
                      (print-function (make-conjoint-print-function
                                       *arrow/print-functions-list*)))
   (make-instance 'object/arrow
                  :source-selector source-selector
                  :target-selector target-selector
                  :properties properties
-                 :addition-to-graph-fn addition-to-graph-fn
-                 :deletion-from-graph-fn deletion-from-graph-fn
+                 :events-handler-fn events-handler-fn
                  :print-function print-function))
 
 (defun copy-arrow (arrow)
   (make-arrow :source-selector (copy-selector (arrow/source-selector arrow))
               :target-selector (copy-selector (arrow/target-selector arrow))
               :properties (copy-properties (arrow/properties arrow))
-              :addition-to-graph-fn (arrow/addition-to-graph-event-handler arrow)
-              :deletion-from-graph-fn (arrow/deletion-from-graph-event-handler arrow)
+              :events-handler-fn (arrow/events-handler-function arrow)
               :print-function (arrow/print-function arrow)))
 
 (defun arrow-equal (arrow1 arrow2)
