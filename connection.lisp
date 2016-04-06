@@ -10,105 +10,141 @@
 (defun copy-selector (selector)
   (copy-list selector))
 
+(defparameter *tag-test* #'eql)
+
+(defun selector-equal (sel1 sel2)
+  (and (= (length sel1) (length sel2))
+     (every *tag-test* sel1 sel2)))
+
 ;;; *** arrow ***
 
-(defparameter *arrow/properties-test* #'equalp)
-
-(defparameter *arrow/print-functions-list* nil)
-
 (defclass object/arrow ()
-  ((source-selector :accessor arrow/source-selector
+  ((source-selector :reader arrow/source-selector
                     :initarg :source-selector
                     :initform nil)
-   (target-selector :accessor arrow/target-selector
+   (target-selector :reader arrow/target-selector
                     :initarg :target-selector
-                    :initform nil)
-   (properties :accessor arrow/properties
-               :initarg :properties
-               :initform nil)
-   (events-handler-fn :accessor arrow/events-handler-function
-                      :initarg :events-handler-fn
-                      :initform (constantly nil))
-   (print-function :accessor arrow/print-function
-                   :initarg :print-function
-                   :initform (constantly ""))))
+                    :initform nil)))
+
+(defun arrow/description-string (arrow &key no-object-class)
+  (with-slots (source-selector target-selector) arrow
+    (let ((descr (let ((*print-circle* nil))
+                   (format nil "~:S -> ~:S"
+                           source-selector target-selector))))
+      (if no-object-class
+          descr
+          (concatenate 'string "ARROW " descr)))))
 
 (defmethod print-object ((instance object/arrow) st)
   (print-unreadable-object (instance st)
-    (with-slots (source-selector target-selector properties print-function) instance
-      (let ((info (funcall print-function properties)))
-        (format st (concatenate 'string
-                                "ARROW"
-                                (cond
-                                  ((and source-selector target-selector)
-                                   (format nil " SOURCE ~S TARGET ~S"
-                                           source-selector target-selector))
-                                  (source-selector
-                                   (format nil " SOURCE ~S" source-selector))
-                                  (target-selector
-                                   (format nil " TARGET ~S" target-selector))
-                                  (t ""))
-                                (if (plusp (length info)) " " "")
-                                info))))))
+    (format st (arrow/description-string instance))))
 
-(defun make-arrow (&key source-selector target-selector properties
-                     (events-handler-fn (constantly nil))
-                     (print-function (make-conjoint-print-function
-                                      *arrow/print-functions-list*)))
+(defun make-arrow (&key source-selector target-selector)
   (make-instance 'object/arrow
                  :source-selector source-selector
-                 :target-selector target-selector
-                 :properties properties
-                 :events-handler-fn events-handler-fn
-                 :print-function print-function))
+                 :target-selector target-selector))
 
 (defun copy-arrow (arrow)
   (make-arrow :source-selector (copy-selector (arrow/source-selector arrow))
-              :target-selector (copy-selector (arrow/target-selector arrow))
-              :properties (copy-properties (arrow/properties arrow))
-              :events-handler-fn (arrow/events-handler-function arrow)
-              :print-function (arrow/print-function arrow)))
+              :target-selector (copy-selector (arrow/target-selector arrow))))
 
 (defun arrow-equal (arrow1 arrow2)
-  (funcall *arrow/properties-test* (arrow/properties arrow1) (arrow/properties arrow2)))
+  (and (selector-equal (arrow/source-selector arrow1)
+                     (arrow/source-selector arrow2))
+     (selector-equal (arrow/target-selector arrow1)
+                     (arrow/target-selector arrow2))))
 
 ;;; *** connection ***
 
+;; (defconstant +purpose/regular+ :regular) is from node.lisp
+
 (defclass object/connection ()
-  ((arrow :accessor connection/arrow
-          :initarg :arrow
-          :initform (error "CONNECTION -- :arrow parameter must be supplied"))
-   (source :accessor connection/source-label
+  ((source :reader connection/source-label
            :initarg :source
            :initform (error "CONNECTION -- :source parameter must be supplied"))
-   (target :accessor connection/target-label
+   (target :reader connection/target-label
            :initarg :target
-           :initform (error "CONNECTION -- :target parameter must be supplied"))))
+           :initform (error "CONNECTION -- :target parameter must be supplied"))
+   (arrow :reader connection/arrow
+          :initarg :arrow
+          :initform nil)
+   (purpose :reader connection/purpose
+            :initarg :purpose
+            :initform +purpose/regular+)
+   (properties :reader connection/properties
+               :initarg :properties
+               :initform nil)
+   (events-handler-fn :accessor connection/events-handler-function
+                      :initarg :events-handler-fn
+                      :initform (constantly nil))
+   (info-string-fn :accessor connection/info-string-function
+                   :initarg :info-string-function
+                   :initform (constantly ""))
+   (arrow->string-fn :accessor connection/arrow->string
+                    :initarg :arrow->string-fn
+                    :initform
+                    #'(lambda (arrow purpose)
+                        (declare (ignore purpose))
+                        (if arrow
+                            (concatenate 'string
+                                         " "
+                                         (arrow/description-string
+                                          arrow :no-object-class t)
+                                         " ")
+                            " -> ")))))
+
+(defun connection/description-string (connection &key no-object-class)
+  (let ((descr (let ((*print-circle* nil))
+                 (with-slots (source target arrow purpose properties info-string-fn) connection
+                   (let ((info (funcall info-string-fn connection)))
+                     (concatenate 'string
+                                  (format nil "~S [~S]~A[~S]"
+                                          purpose
+                                          source
+                                          (funcall (connection/arrow->string connection)
+                                                   arrow purpose)
+                                          target)
+                                  (if (plusp (length info)) " " "")
+                                  info))))))
+    (if no-object-class
+        descr
+        (concatenate 'string "CONNECTION " descr))))
 
 (defmethod print-object ((instance object/connection) st)
   (print-unreadable-object (instance st)
-    (with-slots (arrow source target) instance
-      (format st (format nil "CONNECTION [~S]->[~S] ~S" source target arrow)))))
+    (format st (connection/description-string instance))))
 
-(defun make-connection (arrow source-label target-label)
-  (make-instance 'object/connection
-                 :arrow arrow
-                 :source source-label
-                 :target target-label))
+(defun connection/regular? (connection)
+  (eql (connection/purpose connection) +purpose/regular+))
+
+(defun make-connection (source-label target-label &rest args)
+  (apply (alexandria:curry #'make-instance 'object/connection
+                           :source source-label
+                           :target target-label) args))
 
 (defun copy-connection (connection)
   (make-connection
-   (copy-arrow (connection/arrow connection))
    (connection/source-label connection)
-   (connection/target-label connection)))
+   (connection/target-label connection)
+   :arrow (let ((arrow (connection/arrow connection)))
+            (if arrow (copy-arrow arrow)))
+   :purpose (connection/purpose connection)
+   :properties (copy-properties (connection/properties connection))
+   :events-handler-fn (connection/events-handler-function connection)
+   :info-string-function (connection/info-string-function connection)
+   :arrow->string-fn (connection/arrow->string connection)))
 
 (defun connection-equal (conn1 conn2)
-  (and (label-equal (connection/source-label conn1)
+  (and (purpose-equal (connection/purpose conn1)
+                    (connection/purpose conn2))
+     (label-equal (connection/source-label conn1)
                   (connection/source-label conn2))
      (label-equal (connection/target-label conn1)
                   (connection/target-label conn2))
-     (arrow-equal (connection/arrow conn1)
-                  (connection/arrow conn2))))
+     (or (and (null (connection/arrow conn1))
+           (null (connection/arrow conn2)))
+        (arrow-equal (connection/arrow conn1)
+                     (connection/arrow conn2)))))
 
 (defun connection/direction (connection label)
   (let* ((src-label (connection/source-label connection))
