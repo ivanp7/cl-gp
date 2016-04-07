@@ -49,10 +49,12 @@
               :target-selector (copy-selector (arrow/target-selector arrow))))
 
 (defun arrow-equal (arrow1 arrow2)
-  (and (selector-equal (arrow/source-selector arrow1)
-                     (arrow/source-selector arrow2))
-     (selector-equal (arrow/target-selector arrow1)
-                     (arrow/target-selector arrow2))))
+  (or (and (null arrow1) (null arrow2))
+     (and arrow1 arrow2
+        (selector-equal (arrow/source-selector arrow1)
+                        (arrow/source-selector arrow2))
+        (selector-equal (arrow/target-selector arrow1)
+                        (arrow/target-selector arrow2)))))
 
 ;;; *** connection ***
 
@@ -120,10 +122,8 @@
                   (connection/source-label conn2))
      (label-equal (connection/target-label conn1)
                   (connection/target-label conn2))
-     (or (and (null (connection/arrow conn1))
-           (null (connection/arrow conn2)))
-        (arrow-equal (connection/arrow conn1)
-                     (connection/arrow conn2)))))
+     (arrow-equal (connection/arrow conn1)
+                  (connection/arrow conn2))))
 
 (defparameter +direction/loop+ :loop)
 (defparameter +direction/input+ :input)

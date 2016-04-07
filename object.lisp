@@ -116,7 +116,7 @@
   ((purpose :reader object/purpose
             :initarg :purpose
             :initform +purpose/regular+)
-   (properties :reader object/properties
+   (properties :accessor object/properties
                :initarg :properties
                :initform nil)
    (events-handler-fn :accessor object/events-handler-function
@@ -150,11 +150,18 @@
 
 ;;; *** miscellaneous ***
 
-(defun append-info-functions (fn-list)
+(defun make-conjoint-events-handler (events-handlers-list)
   #'(lambda (&rest args)
-      (reduce #'(lambda (str1 str2)
-                  (concatenate 'string str1 str2))
-              (mapcar #'(lambda (fn)
-                          (apply fn args))
-                      fn-list)
-              :initial-value "")))
+      (dolist (fn events-handlers-list)
+        (apply fn args))
+      nil))
+
+(defun make-conjoint-info-function (info-functions-list)
+  (if (null info-functions-list)
+      (constantly "")
+      #'(lambda (&rest args)
+          (reduce #'(lambda (str1 str2)
+                      (concatenate 'string str1 " " str2))
+                  (mapcar #'(lambda (fn)
+                              (apply fn args))
+                          info-functions-list)))))
