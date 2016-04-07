@@ -7,17 +7,35 @@
   :depends-on (#:alexandria
                #:cl-graph
                #:iterate)
-  :components ((:file "package")
+  :components (;; abstract graph framework
+               (:file "package")
                (:file "object" :depends-on ("package"))
                (:file "node" :depends-on ("object"))
                (:file "connection" :depends-on ("object" "node"))
-               (:file "constraints" :depends-on ("package"))
-               (:file "graph" :depends-on ("object" "node" "connection" "constraints"))
-               (:file "uses" :depends-on ("graph"))
-               (:file "call-constraint" :depends-on ("uses"))
-               (:file "type-constraint" :depends-on ("uses"))
-               (:file "feedforward-constraint" :depends-on ("uses"))
-               (:file "disjoint-inputs-constraint" :depends-on ("uses"))
-               (:file "finite-recursion-constraint" :depends-on ("uses"))
-               (:file "interpreter" :depends-on ("uses"))
-               (:file "cl-gp" :depends-on ("constraints" "graph" "interpreter"))))
+               (:file "structural-constraints" :depends-on ("package"))
+               (:file "constraint-propagation-system" :depends-on ("package"))
+               (:file "graph" :depends-on ("object" "node" "connection"
+                                                    "structural-constraints"))
+
+
+               ;; generic constraints:
+               (:file "disjoint-input-arrows-constraint" :depends-on ("graph"))
+               (:file "strong-typing-constraint"
+                      :depends-on ("graph" "constraint-propagation-system"))
+
+
+               ;; specific methods of use:
+               ;; 1) programs
+               (:file "programs" :depends-on ("graph"
+                                              "strong-typing-constraint"
+                                              "disjoint-input-arrows-constraint"))
+
+
+               ;; abstraction over methods of use
+               (:file "use" :depends-on ("programs"))
+
+
+               ;; abstract genetic programming algorithm
+               (:file "fitness" :depends-on ("use"))
+               (:file "operators" :depends-on ("use"))
+               (:file "cl-gp" :depends-on ("graph" "fitness" "operators"))))

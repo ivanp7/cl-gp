@@ -1,7 +1,8 @@
-;;;; uses.lisp
+;;;; use.lisp
 
 (in-package #:cl-gp)
 
+#|
 (defconstant +purpose/callee+ :callee)
 (defconstant +purpose/caller+ :caller)
 (defconstant +purpose/call+ :call)
@@ -30,3 +31,4 @@
                            :source callee-label
                            :target caller-label
                            :purpose +purpose/call+) args))
+|#

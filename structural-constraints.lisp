@@ -1,4 +1,4 @@
-;;;; constraint.lisp
+;;;; structural-constraints.lisp
 
 (in-package #:cl-gp)
 

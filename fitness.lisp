@@ -1,3 +1,3 @@
-;;;; program.lisp
+;;;; fitness.lisp
 
 (in-package #:cl-gp)

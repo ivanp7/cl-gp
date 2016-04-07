@@ -1,6 +1,8 @@
-;;;; interpreter.lisp
+;;;; programs.lisp
 
 (in-package #:cl-gp)
+
+;;;; В этом файле должны быть все ограничения, интерпретатор и прочие функции
 
 ;;; *** object name ***
 
@@ -20,3 +22,10 @@
   (if (null (graph/node graph *world-node-id*))
       nil
       #|TODO|#))
+
+
+
+
+(defparameter *feedforward-constraint-function* (constantly t)) ; dummy
+(defparameter *finite-recursion-constraint-function* (constantly t)) ; dummy
+(defparameter *call-constraint-function* (constantly t)) ; dummy
