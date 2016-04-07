@@ -146,22 +146,33 @@
         (arrow-equal (connection/arrow conn1)
                      (connection/arrow conn2)))))
 
+(defparameter +direction/loop+ :loop)
+(defparameter +direction/input+ :input)
+(defparameter +direction/output+ :output)
+
 (defun connection/direction (connection label)
   (let* ((src-label (connection/source-label connection))
          (src-label-equal (label-equal label src-label))
          (tgt-label (connection/target-label connection))
          (tgt-label-equal (label-equal label tgt-label)))
     (cond
-      ((and src-label-equal tgt-label-equal) (values :loop label))
-      (tgt-label-equal (values :input src-label))
-      (src-label-equal (values :output tgt-label))
+      ((and src-label-equal tgt-label-equal) (values +direction/loop+ label))
+      (tgt-label-equal (values +direction/input+ src-label))
+      (src-label-equal (values +direction/output+ tgt-label))
       (t (values nil nil)))))
 
 (defun direction/loop? (dir)
-  (eql dir :loop))
+  (eql dir +direction/loop+))
 
 (defun direction/input? (dir)
-  (eql dir :input))
+  (eql dir +direction/input+))
 
 (defun direction/output? (dir)
-  (eql dir :output))
+  (eql dir +direction/output+))
+
+(defun direction/inverse (dir)
+  (cond
+    ((direction/loop? dir) +direction/loop+)
+    ((direction/input? dir) +direction/output+)
+    ((direction/output? dir) +direction/input+)
+    (t nil)))
