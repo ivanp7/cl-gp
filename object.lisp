@@ -1,4 +1,4 @@
-;;;; properties.lisp
+;;;; object.lisp
 
 (in-package #:cl-gp)
 
@@ -40,7 +40,8 @@
               :initform nil)))
 
 (defun properties/all-keys (properties)
-  (mapcar #'property/key (slot-value properties 'container)))
+  (if properties
+      (mapcar #'property/key (slot-value properties 'container))))
 
 (defmethod print-object ((instance object/properties-container) st)
   (print-unreadable-object (instance st)
@@ -48,28 +49,35 @@
       (format st "PROPERTIES-CONTAINER KEYS: ~S" (properties/all-keys instance)))))
 
 (defun properties/add-property! (properties property)
-  (with-slots (container) properties
-    (let ((old-container container))
-      (pushnew property container
-               :key #'property/key
-               :test *property-key-test*)
-      (not (eql container old-container)))))
+  (when properties
+    (with-slots (container) properties
+      (let ((old-container container))
+        (pushnew property container
+                 :key #'property/key
+                 :test *property-key-test*)
+        (not (eql container old-container))))))
 
 (defun properties/delete-property! (properties key)
-  (delete-if #'(lambda (property)
-                 (funcall *property-key-test*
-                          (property/key property) key))
-             (slot-value properties 'container)
-             :count 1))
+  (when properties
+    (with-slots (container) properties
+      (let ((old-length (length container)))
+        (setf container (delete-if #'(lambda (property)
+                                    (funcall *property-key-test*
+                                             (property/key property) key))
+                                container
+                                :count 1))
+        (/= (length container) old-length)))))
 
 (defun properties/get-property (properties key)
-  (find-if #'(lambda (property)
-               (funcall *property-key-test*
-                        (property/key property) key))
-           (slot-value properties 'container)))
+  (when properties
+    (find-if #'(lambda (property)
+                 (funcall *property-key-test*
+                          (property/key property) key))
+             (slot-value properties 'container))))
 
 (defun properties/get-properties-list (properties)
-  (copy-list (slot-value properties 'container)))
+  (if properties
+      (copy-list (slot-value properties 'container))))
 
 (defun properties/get-property-value (properties key &optional default-value)
   (let ((property (properties/get-property properties key)))
@@ -95,9 +103,54 @@
   (make-properties-container (mapcar #'copy-property
                                      (slot-value properties 'container))))
 
+;;; *** abstract object ***
+
+(defparameter *purpose-test* #'eql)
+
+(defun purpose-equal (purpose1 purpose2)
+  (funcall *purpose-test* purpose1 purpose2))
+
+(defconstant +purpose/regular+ :regular)
+
+(defclass abstract-object ()
+  ((purpose :reader object/purpose
+            :initarg :purpose
+            :initform +purpose/regular+)
+   (properties :reader object/properties
+               :initarg :properties
+               :initform nil)
+   (events-handler-fn :accessor object/events-handler-function
+                      :initarg :events-handler-fn
+                      :initform (constantly nil))
+   (info-string-fn :accessor object/info-string-function
+                   :initarg :info-string-function
+                   :initform (constantly ""))))
+
+(defgeneric object/description-string (object &key no-object-class-name)
+  (:documentation "Generate description string for printing purposes"))
+
+(defmethod print-object ((instance abstract-object) st)
+  (print-unreadable-object (instance st)
+    (format st (object/description-string instance))))
+
+(defun make-object (object-class &optional args)
+  (apply (alexandria:curry #'make-instance object-class) args))
+
+(defun copy-object (object &optional args)
+  (apply (alexandria:curry #'make-instance (type-of object))
+         (nconc (if (null (getf args :purpose))
+                    (list :purpose (object/purpose object)))
+                (if (null (getf args :properties))
+                    (list :properties (copy-properties (object/properties object))))
+                (if (null (getf args :events-handler-fn))
+                    (list :events-handler-fn (object/events-handler-function object)))
+                (if (null (getf args :info-string-fn))
+                    (list :info-string-fn (object/info-string-function object)))
+                args)))
+
 ;;; *** miscellaneous ***
 
-(defun make-conjoint-info-function (fn-list)
+(defun append-info-functions (fn-list)
   #'(lambda (&rest args)
       (reduce #'(lambda (str1 str2)
                   (concatenate 'string str1 str2))
