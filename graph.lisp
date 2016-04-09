@@ -201,7 +201,7 @@
                                           adjacent-node-event-handler-fn)
   (let* ((deleted-node (cl-graph:element vertex))
          (deleted-label (node/label deleted-node)))
-    (macrolet ((signal-event-fn (vertex-fn)
+    (macrolet ((signal-event-fn (vertex-fn src-node tgt-node)
                  `#'(lambda (edge)
                       (let ((node (cl-graph:element (,vertex-fn edge))))
                         (unless (label-equal deleted-label (node/label node))
@@ -210,16 +210,19 @@
                             (funcall (if connection-event-handler-fn
                                          connection-event-handler-fn
                                          (object/events-handler-function conn))
-                                     conn :on-deletion-from-graph :graph graph)
+                                     conn :on-deletion-from-graph
+                                     :source ,src-node
+                                     :target ,tgt-node
+                                     :graph graph)
                             (funcall (if adjacent-node-event-handler-fn
                                          adjacent-node-event-handler-fn
                                          (object/events-handler-function node))
                                      node :on-loss-of-connection
                                      :connection conn :graph graph)))))))
       (cl-graph:iterate-source-edges
-       vertex (signal-event-fn cl-graph:source-vertex))
+       vertex (signal-event-fn cl-graph:target-vertex deleted-node node))
       (cl-graph:iterate-target-edges
-       vertex (signal-event-fn cl-graph:target-vertex)))
+       vertex (signal-event-fn cl-graph:source-vertex node deleted-node)))
     (let ((edge (~graph/edge graph deleted-label deleted-label)))
       (if edge
           (dolist (conn (~edge-container/connections
@@ -227,7 +230,10 @@
             (funcall (if connection-event-handler-fn
                          connection-event-handler-fn
                          (object/events-handler-function conn))
-                     conn :on-deletion-from-graph :graph graph)
+                     conn :on-deletion-from-graph
+                     :source deleted-node
+                     :target deleted-node
+                     :graph graph)
             (funcall (if node-event-handler-fn
                          node-event-handler-fn
                          (object/events-handler-function deleted-node))
@@ -426,6 +432,8 @@
                      connection-event-handler-fn
                      (object/events-handler-function connection))
                  connection :on-addition-to-graph
+                 :source (cl-graph:element src-vertex)
+                 :target (cl-graph:element tgt-vertex)
                  :graph graph)
         (funcall (if node-event-handler-fn
                      node-event-handler-fn
@@ -462,6 +470,8 @@
                      connection-event-handler-fn
                      (object/events-handler-function connection))
                  connection :on-deletion-from-graph
+                 :source (cl-graph:element src-vertex)
+                 :target (cl-graph:element tgt-vertex)
                  :graph graph)
         (funcall (if node-event-handler-fn
                      node-event-handler-fn

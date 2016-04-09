@@ -4,13 +4,23 @@
 
 ;;; *** abstract constraint ***
 
-(defclass constraint-propagation-system/constraint ()
+(defclass cps/constraint ()
   ((value-fn :accessor cps-constraint/inform-about-value-function
              :initarg :value-fn
              :initform (constantly nil))
    (no-value-fn :accessor cps-constraint/inform-about-no-value-function
                 :initarg :no-value-fn
                 :initform (constantly nil))))
+
+(defun make-cps-constraint (&key value-fn no-value-fn)
+  (apply (alexandria:curry #'make-instance 'cps/constraint)
+         (nconc (if value-fn (list :value-fn value-fn))
+                (if no-value-fn (list :no-value-fn no-value-fn)))))
+
+(defun copy-cps-constraint (cps-constraint)
+  (make-cps-constraint
+   :value-fn (cps-constraint/inform-about-value-function cps-constraint)
+   :no-value-fn (cps-constraint/inform-about-no-value-function cps-constraint)))
 
 ;; Inform contraint about a new value on a one of the connectors.
 (defun cps-constraint/inform-about-value (constraint)
@@ -24,7 +34,7 @@
 
 (defparameter *constraint-test* #'eql)
 
-(defclass constraint-propagation-system/connector ()
+(defclass cps/connector ()
   ((value :reader cps-connector/value
           :initform nil)
    (informant :initform nil)
