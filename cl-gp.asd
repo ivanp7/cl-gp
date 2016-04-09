@@ -16,18 +16,19 @@
                (:file "constraint-propagation-system" :depends-on ("package"))
                (:file "graph" :depends-on ("object" "node" "connection"
                                                     "structural-constraints"))
+               (:file "reference" :depends-on ("graph"))
 
 
                ;; generic constraints:
                (:file "disjoint-input-arrows-constraint" :depends-on ("graph"))
                (:file "strong-typing-constraint"
-                      :depends-on ("graph" "constraint-propagation-system"))
+                      :depends-on ("graph" "reference" "constraint-propagation-system"))
 
 
                ;; specific methods of use:
                ;; 1) programs
                (:file "programs" :depends-on ("graph"
-                                              "strong-typing-constraint"
+                                              "reference"
                                               "disjoint-input-arrows-constraint"))
 
 

@@ -25,7 +25,7 @@
 
 
 
-
+#|
 (defparameter *feedforward-constraint-function* (constantly t)) ; dummy
 (defparameter *finite-recursion-constraint-function* (constantly t)) ; dummy
-(defparameter *call-constraint-function* (constantly t)) ; dummy
+|#
