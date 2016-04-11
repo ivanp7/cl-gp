@@ -17,6 +17,23 @@
            :initarg :groups
            :initform nil)))
 
+(defmethod initialize-instance :after ((instance object/node) &key event-handler-fn info-string-fn)
+  (let ((event-handler-arg event-handler-fn)
+        (info-string-arg info-string-fn))
+    (with-slots (event-handler-fn info-string-fn) instance
+      (setf event-handler-fn
+         (if event-handler-arg
+             event-handler-arg
+             (make-conjoint-event-handler-function
+              (mapcar #'structural-constraint/node-event-handler-function
+                      *structural-constraints*))))
+      (setf info-string-fn
+         (if info-string-arg
+             info-string-arg
+             (make-conjoint-info-function
+              (mapcar #'info-string-functions-package/node-info-string-function
+                      *info-string-functions-packages*)))))))
+
 (defmethod object/description-string ((object object/node) &key no-object-class-name)
   (let ((descr (let ((*print-circle* nil))
                  (with-slots (label purpose properties info-string-fn) object

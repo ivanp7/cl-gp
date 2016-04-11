@@ -10,9 +10,9 @@
   :components (;; abstract graph framework
                (:file "package")
                (:file "object" :depends-on ("package"))
-               (:file "node" :depends-on ("object"))
-               (:file "connection" :depends-on ("object" "node"))
                (:file "structural-constraints" :depends-on ("package"))
+               (:file "node" :depends-on ("object" "structural-constraints"))
+               (:file "connection" :depends-on ("object" "node" "structural-constraints"))
                (:file "constraint-propagation-system" :depends-on ("package"))
                (:file "graph" :depends-on ("object" "node" "connection"
                                                     "structural-constraints"))

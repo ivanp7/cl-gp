@@ -89,7 +89,9 @@
   (let ((property (properties/get-property properties key)))
     (if property
         (setf (property/value property) new-value)
-        (error "PROPERTIES/SET-PROPERTY-VALUE! -- property ~S doesn't exist" key))))
+        (progn
+          (properties/add-property! properties (make-property key new-value))
+          new-value))))
 
 
 
@@ -119,12 +121,10 @@
    (properties :accessor object/properties
                :initarg :properties
                :initform nil)
-   (events-handler-fn :accessor object/events-handler-function
-                      :initarg :events-handler-fn
-                      :initform (constantly nil))
+   (event-handler-fn :accessor object/event-handler-function
+                     :initform nil)
    (info-string-fn :accessor object/info-string-function
-                   :initarg :info-string-function
-                   :initform (constantly ""))))
+                   :initform nil)))
 
 (defgeneric object/description-string (object &key no-object-class-name)
   (:documentation "Generate description string for printing purposes"))
@@ -142,26 +142,20 @@
                     (list :purpose (object/purpose object)))
                 (if (null (getf args :properties))
                     (list :properties (copy-properties (object/properties object))))
-                (if (null (getf args :events-handler-fn))
-                    (list :events-handler-fn (object/events-handler-function object)))
+                (if (null (getf args :event-handler-fn))
+                    (list :event-handler-fn (object/event-handler-function object)))
                 (if (null (getf args :info-string-fn))
                     (list :info-string-fn (object/info-string-function object)))
                 args)))
 
-;;; *** miscellaneous ***
+(defun object/get-property-value (object key &optional default-value)
+  (properties/get-property-value (object/properties object) key default-value))
 
-(defun make-conjoint-events-handler (events-handlers-list)
-  #'(lambda (&rest args)
-      (dolist (fn events-handlers-list)
-        (apply fn args))
-      nil))
-
-(defun make-conjoint-info-function (info-functions-list)
-  (if (null info-functions-list)
-      (constantly "")
-      #'(lambda (&rest args)
-          (reduce #'(lambda (str1 str2)
-                      (concatenate 'string str1 " " str2))
-                  (mapcar #'(lambda (fn)
-                              (apply fn args))
-                          info-functions-list)))))
+(defun object/set-property-value! (object key new-value)
+  (if (object/properties object)
+      (properties/set-property-value! (object/properties object) key new-value)
+      (progn
+        (setf (object/properties object)
+           (make-properties-container
+            (list (make-property key new-value))))
+        new-value)))

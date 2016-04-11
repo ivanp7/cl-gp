@@ -7,13 +7,13 @@
 (defconstant +purpose/reference+ :reference)
 
 (defun node/reference-source? (node)
-  (purpose-equal (node/purpose node) +purpose/reference-source+))
+  (purpose-equal (object/purpose node) +purpose/reference-source+))
 
 (defun node/reference-target? (node)
-  (purpose-equal (node/purpose node) +purpose/reference-target+))
+  (purpose-equal (object/purpose node) +purpose/reference-target+))
 
 (defun connection/reference? (connection)
-  (purpose-equal (connection/purpose connection) +purpose/reference+))
+  (purpose-equal (object/purpose connection) +purpose/reference+))
 
 (defun make-reference-connection (source-label target-label &rest args)
   (apply (alexandria:curry #'make-connection source-label target-label
@@ -24,10 +24,12 @@
 
 
 
-(defparameter *reference-constraint-function*
-  #'(lambda (source-node target-node connection graph)
-      (or (not (connection/reference? connection))
-         (and (node/reference-source? source-node)
-            (node/reference-target? target-node)
-            (null (graph/input-connections graph (list target-node)
-                                           :purpose +purpose/reference+))))))
+(defparameter *reference-constraint*
+  (make-structural-constraint
+   :constraint-test-fn
+   #'(lambda (source-node target-node connection graph)
+       (or (not (connection/reference? connection))
+          (and (node/reference-source? source-node)
+             (node/reference-target? target-node)
+             (null (graph/input-connections graph (list target-node)
+                                            :purpose +purpose/reference+)))))))
