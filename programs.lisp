@@ -12,9 +12,14 @@
 (defun object/name (object)
   (properties/get-property-value (object/properties object) :name))
 
-(defparameter *name-info-function*
-  #'(lambda (object)
-      (format nil "~S" (object/name object))))
+(defparameter *name-info-string-functions-package*
+  (make-info-string-functions-package
+   :name :name
+   :common-info-string-fn
+   #'(lambda (object)
+       (let ((*print-circle* nil))
+         (format nil "{NAME ~S}"
+                 (object/name object))))))
 
 ;;; *** graph -> s-expression convertion ***
 

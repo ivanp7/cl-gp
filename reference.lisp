@@ -24,8 +24,9 @@
 
 
 
-(defparameter *reference-constraint*
+(defparameter *reference-relations*
   (make-structural-constraint
+   :name :reference-relations
    :constraint-test-fn
    #'(lambda (source-node target-node connection graph)
        (or (not (connection/reference? connection))

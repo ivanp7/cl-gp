@@ -83,6 +83,18 @@
     :initarg :graph-info-string-fn
     :initform nil)))
 
+(defmethod initialize-instance :after ((instance object/info-string-functions-package)
+                                       &key common-info-string-fn)
+  (when common-info-string-fn
+    (with-slots (node-info-string-fn connection-info-string-fn graph-info-string-fn)
+        instance
+      (unless node-info-string-fn
+        (setf node-info-string-fn common-info-string-fn))
+      (unless connection-info-string-fn
+        (setf connection-info-string-fn common-info-string-fn))
+      (unless graph-info-string-fn
+        (setf graph-info-string-fn common-info-string-fn)))))
+
 (defmethod print-object ((instance object/info-string-functions-package) st)
   (print-unreadable-object (instance st)
     (with-slots (name) instance
