@@ -6,20 +6,30 @@
 
 ;;; *** object name ***
 
-(defun make-name-property-list (name)
-  (list (make-property :name name)))
-
 (defun object/name (object)
   (properties/get-property-value (object/properties object) :name))
 
-(defparameter *name-info-string-functions-package*
-  (make-info-string-functions-package
+(defparameter *name-constraint*
+  (make-structural-constraint
+   :name 'names
+   :init-args-getter #'(lambda (kind)
+                         (if (not (kind-equal kind +kind/connection+))
+                             '(:name)))
+   :properties-constr-fn-getter #'(lambda (kind)
+                                    (if (not (kind-equal kind +kind/connection+))
+                                        #'(lambda (&key name)
+                                            (make-property :name name))))))
+
+(defparameter *name-info-string-function-getter-container*
+  (make-info-string-function-getter-container
    :name :name
-   :common-info-string-fn
-   #'(lambda (object)
-       (let ((*print-circle* nil))
-         (format nil "{NAME ~S}"
-                 (object/name object))))))
+   :info-string-fn-getter
+   #'(lambda (kind)
+       (if (not (kind-equal kind +kind/connection+))
+           #'(lambda (object)
+               (let ((*print-circle* nil))
+                 (format nil "{NAME ~S}"
+                         (object/name object))))))))
 
 ;;; *** graph -> s-expression convertion ***
 

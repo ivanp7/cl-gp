@@ -81,36 +81,35 @@
                                          " ")
                             " -> ")))))
 
-(defun object/connection? (object)
-  (typep object 'object/connection))
+(defconstant +kind/connection+ 'connection)
 
-(defmethod object/description-string ((object object/connection) &key no-object-class-name)
-  (let ((descr (let ((*print-circle* nil))
-                 (with-slots (source target arrow purpose properties info-string-fn) object
-                   (let ((info (funcall info-string-fn object)))
-                     (concatenate 'string
-                                  (format nil "~S [~S]~A[~S]"
-                                          purpose
-                                          source
-                                          (funcall (connection/arrow->string object)
-                                                   arrow purpose)
-                                          target)
-                                  (if (plusp (length info)) " " "")
-                                  info))))))
-    (if no-object-class-name
-        descr
-        (concatenate 'string "CONNECTION " descr))))
+(defmethod object/kind ((object object/connection))
+  +kind/connection+)
+
+(defun object/connection? (object)
+  (kind-equal (object/kind object) +kind/connection+))
 
 (defun connection/regular? (connection)
-  (eql (object/purpose connection) +purpose/regular+))
+  (purpose-equal (object/purpose connection) +purpose/regular+))
+
+(define-description-string-method object/connection
+  (let ((*print-circle* nil))
+    (with-slots (source target arrow purpose properties info-string-fn) object
+      (let ((info (funcall info-string-fn object)))
+        (concatenate 'string
+                     (format nil "~S [~S]~A[~S]"
+                             purpose
+                             source
+                             (funcall (connection/arrow->string object)
+                                      arrow purpose)
+                             target)
+                     (if (plusp (length info)) " " "")
+                     info)))))
+
+
 
 (defun make-connection (source-label target-label &rest args)
-  (~object-init-args-handling-let
-      args
-      (structural-constraint/connection-properties-constructor-function
-       structural-constraint/connection-init-key-arguments
-       structural-constraint/connection-event-handler-function
-       info-string-functions-package/connection-info-string-function)
+  (~object-init-args-handling-let (+kind/connection+ args)
     (make-object 'object/connection
                  (nconc (list :source source-label
                               :target target-label

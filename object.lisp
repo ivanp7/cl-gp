@@ -125,10 +125,9 @@
   (make-properties-container
    (reduce #'nconc
            (delete nil (mapcar #'(lambda (object)
-                                 (cond
-                                   ((object/property? object) object)
-                                   ((object/properties-container? object)
-                                    (properties/get-list-of-properties object))))
+                                 (if (object/properties-container? object)
+                                     (properties/get-list-of-properties object)
+                                     (alexandria:ensure-list object)))
                              properties-list))
            :from-end t)))
 
@@ -139,7 +138,19 @@
 (defun purpose-equal (purpose1 purpose2)
   (funcall *purpose-test* purpose1 purpose2))
 
-(defconstant +purpose/regular+ :regular)
+(defconstant +purpose/regular+ 'regular)
+
+
+
+(defparameter *kind-test* #'eql)
+
+(defun kind-equal (kind1 kind2)
+  (funcall *kind-test* kind1 kind2))
+
+(defgeneric object/kind (object)
+  (:documentation "Get object class identifier value"))
+
+
 
 (defclass abstract-object ()
   ((purpose :reader object/purpose
@@ -155,12 +166,28 @@
                    :initarg :info-string-fn
                    :initform (constantly ""))))
 
-(defgeneric object/description-string (object &key no-object-class-name)
+(defconstant +kind/abstract+ 'object)
+
+(defmethod object/kind ((object abstract-object))
+  +kind/abstract+)
+
+(defgeneric object/description-string (object &key no-object-kind)
   (:documentation "Generate description string for printing purposes"))
+
+(defmacro define-description-string-method (object-class &body body)
+  `(defmethod object/description-string ((object ,object-class) &key no-object-kind)
+     (let ((descr (progn ,@body)))
+       (if no-object-kind
+           descr
+           (format nil "~S~A~A" (object/kind object)
+                   (if (plusp (length descr)) " " "")
+                   descr)))))
 
 (defmethod print-object ((instance abstract-object) st)
   (print-unreadable-object (instance st)
     (format st (object/description-string instance))))
+
+
 
 (defun make-object (object-class &optional args)
   (apply (alexandria:curry #'make-instance object-class) args))

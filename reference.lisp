@@ -2,9 +2,9 @@
 
 (in-package #:cl-gp)
 
-(defconstant +purpose/reference-source+ :ref-source)
-(defconstant +purpose/reference-target+ :ref-target)
-(defconstant +purpose/reference+ :reference)
+(defconstant +purpose/reference-source+ 'ref-source)
+(defconstant +purpose/reference-target+ 'ref-target)
+(defconstant +purpose/reference+ 'reference)
 
 (defun node/reference-source? (node)
   (purpose-equal (object/purpose node) +purpose/reference-source+))

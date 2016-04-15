@@ -17,31 +17,28 @@
            :initarg :groups
            :initform nil)))
 
-(defun object/node? (object)
-  (typep object 'object/node))
+(defconstant +kind/node+ 'node)
 
-(defmethod object/description-string ((object object/node) &key no-object-class-name)
-  (let ((descr (let ((*print-circle* nil))
-                 (with-slots (label purpose properties info-string-fn) object
-                   (let ((info (funcall info-string-fn object)))
-                     (concatenate 'string
-                                  (format nil "~S [~S]" purpose label)
-                                  (if (plusp (length info)) " " "")
-                                  info))))))
-    (if no-object-class-name
-        descr
-        (concatenate 'string "NODE " descr))))
+(defmethod object/kind ((object object/node))
+  +kind/node+)
+
+(defun object/node? (object)
+  (kind-equal (object/kind object) +kind/node+))
 
 (defun node/regular? (node)
   (purpose-equal (object/purpose node) +purpose/regular+))
 
+(define-description-string-method object/node
+  (let ((*print-circle* nil))
+    (with-slots (label purpose properties info-string-fn) object
+      (let ((info (funcall info-string-fn object)))
+        (concatenate 'string
+                     (format nil "~S [~S]" purpose label)
+                     (if (plusp (length info)) " " "")
+                     info)))))
+
 (defun make-node (label &rest args)
-  (~object-init-args-handling-let
-      args
-      (structural-constraint/node-properties-constructor-function
-       structural-constraint/node-init-key-arguments
-       structural-constraint/node-event-handler-function
-       info-string-functions-package/node-info-string-function)
+  (~object-init-args-handling-let (+kind/node+ args)
     (make-object 'object/node
                  (nconc (list :label label
                               :properties properties-container
