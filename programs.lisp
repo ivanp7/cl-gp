@@ -12,13 +12,36 @@
 (defparameter *name-constraint*
   (make-structural-constraint
    :name 'names
-   :init-args-getter #'(lambda (kind)
-                         (if (not (kind-equal kind +kind/connection+))
-                             '(:name)))
-   :properties-constr-fn-getter #'(lambda (kind)
-                                    (if (not (kind-equal kind +kind/connection+))
-                                        #'(lambda (&key name)
-                                            (make-property :name name))))))
+   :event-handler-fn-getter
+   #'(lambda (kind)
+       (if (kind-equal kind +kind/node+)
+           #'(lambda (node event &rest args)
+               (let ((connection (getf args :connection))
+                     (graph (getf args :graph)))
+                 (case event
+                   (:on-setting-of-connection
+                    (if (and (node/reference-target? node)
+                           (connection/reference? connection))
+                        (object/set-property-value!
+                         node :name
+                         (object/get-property-value
+                          (graph/node graph
+                                      (connection/other-node-label
+                                       connection (node/label node)))
+                          :name))))
+                   (:on-loss-of-connection
+                    (if (and (node/reference-target? node)
+                           (connection/reference? connection))
+                        (object/set-property-value! node :name nil))))))))
+   :init-args-getter
+   #'(lambda (kind)
+       (if (not (kind-equal kind +kind/connection+))
+           '(:name)))
+   :properties-constr-fn-getter
+   #'(lambda (kind)
+       (if (not (kind-equal kind +kind/connection+))
+           #'(lambda (&key name)
+               (make-property :name name))))))
 
 (defparameter *name-info-string-function-getter-container*
   (make-info-string-function-getter-container

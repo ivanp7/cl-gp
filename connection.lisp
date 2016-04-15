@@ -142,16 +142,25 @@
 (defparameter +direction/input+ :input)
 (defparameter +direction/output+ :output)
 
-(defun connection/direction (connection label)
-  (let* ((src-label (connection/source-label connection))
-         (src-label-equal (label-equal label src-label))
-         (tgt-label (connection/target-label connection))
-         (tgt-label-equal (label-equal label tgt-label)))
-    (cond
-      ((and src-label-equal tgt-label-equal) (values +direction/loop+ label))
-      (tgt-label-equal (values +direction/input+ src-label))
-      (src-label-equal (values +direction/output+ tgt-label))
-      (t (values nil nil)))))
+(macrolet ((define-function-macro (name expr-both expr-input expr-output expr-none)
+             `(defun ,name (connection label)
+                (let* ((src-label (connection/source-label connection))
+                       (src-label-equal (label-equal label src-label))
+                       (tgt-label (connection/target-label connection))
+                       (tgt-label-equal (label-equal label tgt-label)))
+                  (cond
+                    ((and src-label-equal tgt-label-equal) ,expr-both)
+                    (tgt-label-equal ,expr-input)
+                    (src-label-equal ,expr-output)
+                    (t ,expr-none))))))
+
+  (define-function-macro connection/direction
+      (values +direction/loop+ label) (values +direction/input+ src-label)
+      (values +direction/output+ tgt-label) (values nil nil))
+
+  (define-function-macro connection/other-node-label
+      (values label +direction/loop+) (values src-label +direction/input+)
+      (values tgt-label +direction/output+) (values nil nil)))
 
 (defun direction/loop? (dir)
   (eql dir +direction/loop+))

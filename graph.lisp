@@ -113,25 +113,34 @@
 
 (defun graph/all-nodes (graph &key purpose)
   (if (null purpose)
-      (mapcar #'cl-graph:element
-              (cl-graph:vertexes (~graph/container graph)))
-      (mapcar #'cl-graph:element
-              (cl-graph:find-vertexes-if
-               (~graph/container graph)
-               #'(lambda (vertex)
-                   (purpose-equal purpose
-                                  (object/purpose (cl-graph:element vertex))))))))
+      (let* ((nodes (mapcar #'cl-graph:element
+                            (cl-graph:vertexes (~graph/container graph)))))
+        (values nodes
+                (remove-duplicates (mapcar #'object/purpose nodes)
+                                   :test *purpose-test*)))
+      (values (mapcar #'cl-graph:element
+                      (cl-graph:find-vertexes-if
+                       (~graph/container graph)
+                       #'(lambda (vertex)
+                           (purpose-equal purpose
+                                          (object/purpose (cl-graph:element vertex))))))
+              (list purpose))))
 
 (defun graph/nodes-of-group (graph group-label &key purpose)
-  (mapcar #'cl-graph:element
-          (cl-graph:find-vertexes-if
-           (~graph/container graph)
-           #'(lambda (vertex)
-               (and (or (null purpose)
-                     (purpose-equal purpose
-                                    (object/purpose (cl-graph:element vertex))))
-                  (member group-label (node/groups (cl-graph:element vertex))
-                     :test *label-test*))))))
+  (let ((nodes (mapcar #'cl-graph:element
+                       (cl-graph:find-vertexes-if
+                        (~graph/container graph)
+                        #'(lambda (vertex)
+                            (and (or (null purpose)
+                                  (purpose-equal purpose
+                                                 (object/purpose (cl-graph:element vertex))))
+                               (member group-label (node/groups (cl-graph:element vertex))
+                                  :test *label-test*)))))))
+    (values nodes
+            (if purpose
+                (list purpose)
+                (remove-duplicates (mapcar #'object/purpose nodes)
+                                   :test *purpose-test*)))))
 
 (defun graph/node (graph label)
   (let ((vertex (~graph/vertex graph label)))
@@ -139,9 +148,12 @@
         (cl-graph:element vertex))))
 
 (defun graph/nodes (graph labels-list)
-  (delete nil (mapcar #'(lambda (label)
-                        (graph/node graph label))
-                    labels-list)))
+  (let ((nodes (delete nil (mapcar #'(lambda (label)
+                                     (graph/node graph label))
+                                 labels-list))))
+    (values nodes
+            (remove-duplicates (mapcar #'object/purpose nodes)
+                               :test *purpose-test*))))
 
 (macrolet ((define-neighbours-function (name neighbour-vertexes-expr
                                              edges-expr
@@ -447,7 +459,7 @@
                         connection graph))
         (if (null edge)
             (cl-graph:add-edge-between-vertexes
-             graph src-vertex tgt-vertex
+             (~graph/container graph) src-vertex tgt-vertex
              :value (~make-connections-container connection))
             (~edge-container/add-connection! (cl-graph:element edge) connection))
         (funcall (if node-event-handler-fn
@@ -517,7 +529,7 @@
                  :target (cl-graph:element tgt-vertex))
         (~edge-container/delete-connection! (cl-graph:element edge) connection)
         (if (~edge-container/empty? (cl-graph:element edge))
-            (cl-graph:delete-edge graph edge))
+            (cl-graph:delete-edge (~graph/container graph) edge))
         t))))
 
 (defun graph/disconnect-set! (graph connections &key node-event-handler-fn

@@ -289,9 +289,9 @@
    :event-handler-fn-getter
    #'(lambda (kind)
        (alexandria:switch (kind :test #'kind-equal)
-         (+kind/node+ #'(lambda (node event &key graph) ...))
-         (+kind/connection+ #'(lambda (connection event &key source target graph) ...))
-         (+kind/graph+ #'(lambda (graph event &key node connection source target) ...))
+         (+kind/node+ #'(lambda (node event &rest args) ...))
+         (+kind/connection+ #'(lambda (connection event &rest args) ...))
+         (+kind/graph+ #'(lambda (graph event &rest args) ...))
          (t (constantly nil))))
    :init-args-getter
    #'(lambda (kind)
@@ -367,6 +367,8 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+
+#|
 (defparameter *type/name-test* #'eql)
 
 (defun type-name-equal (name1 name2)
@@ -504,9 +506,9 @@
 
 (defmethod type/reducible? ((source-type abstract-type) (target-type union-type))
   (or (and (type/union-type? source-type)
-        (type-name-equal (union-type/name source-type)
-                         (union-type/name target-type)))
-     (call-next-method)))
+           (type-name-equal (union-type/name source-type)
+                            (union-type/name target-type)))
+      (call-next-method)))
 
 ;;; *** typed value ***
 
@@ -521,8 +523,8 @@
 (defmethod initialize-instance :after ((instance typed-value) &key)
   (with-slots (value-type) instance
     (if (or (type/bottom? instance)
-           (type/unit? instance)
-           (type/top? instance))
+            (type/unit? instance)
+            (type/top? instance))
         (error "TYPED-VALUE -- value must have a specific type"))))
 
 (defmethod print-object ((instance typed-value) st)
@@ -567,9 +569,9 @@
   (if (zerop (length arguments-list))
       (make-primitive-type name)
       (if (every #'(lambda (arg)
-                 (or (type-object? arg)
-                    (typed-value-object? arg)))
-             arguments-list)
+                     (or (type-object? arg)
+                         (typed-value-object? arg)))
+                 arguments-list)
           (make-instance 'parametric-type :name name :arguments arguments-list
                          :reducibility-test reducibility-test
                          :value-test value-test :properties properties))))
@@ -579,21 +581,21 @@
 
 (defmethod type/reducible? ((source-type abstract-type) (target-type parametric-type))
   (or (and (type/parametric? source-type)
-        (type-name-equal (parametric-type/name source-type)
-                         (parametric-type/name target-type))
-        (= (length (parametric-type/arguments source-type))
-           (length (parametric-type/arguments target-type)))
-        (every #'(lambda (source-arg target-arg)
-               (cond
-                 ((and (type-object? source-arg)
-                     (type-object? target-arg))
-                  (type/reducible? source-arg target-arg))
-                 ((and (typed-value-object? source-arg)
-                     (typed-value-object? target-arg))
-                  (typed-value/reducible? source-arg target-arg))))
-           (parametric-type/arguments source-type)
-           (parametric-type/arguments target-type)))
-     (call-next-method)))
+           (type-name-equal (parametric-type/name source-type)
+                            (parametric-type/name target-type))
+           (= (length (parametric-type/arguments source-type))
+              (length (parametric-type/arguments target-type)))
+           (every #'(lambda (source-arg target-arg)
+                      (cond
+                        ((and (type-object? source-arg)
+                              (type-object? target-arg))
+                         (type/reducible? source-arg target-arg))
+                        ((and (typed-value-object? source-arg)
+                              (typed-value-object? target-arg))
+                         (typed-value/reducible? source-arg target-arg))))
+                  (parametric-type/arguments source-type)
+                  (parametric-type/arguments target-type)))
+      (call-next-method)))
 
 ;;; *** primitive type ***
 
@@ -619,9 +621,9 @@
 
 (defmethod type/reducible? ((source-type abstract-type) (target-type primitive-type))
   (or (and (type/primitive? source-type)
-        (type-name-equal (primitive-type/name source-type)
-                         (primitive-type/name target-type)))
-     (call-next-method)))
+           (type-name-equal (primitive-type/name source-type)
+                            (primitive-type/name target-type)))
+      (call-next-method)))
 
 ;;; *** record ***
 
@@ -681,18 +683,18 @@
 
 (defmethod type/reducible? ((source-type abstract-type) (target-type record))
   (or (and (type/record? source-type)
-        (and (= (length (record/fields source-type))
-              (length (record/fields target-type)))
-           (every #'(lambda (target-field)
-                  (find-if #'(lambda (source-field)
-                               (and (funcall *field/name-test*
-                                           (field/name source-field)
-                                           (field/name target-field))
-                                  (type/reducible? (field/type source-field)
-                                                   (field/type target-field))))
-                           (record/fields source-type)))
-              (record/fields target-type))))
-     (call-next-method)))
+           (and (= (length (record/fields source-type))
+                   (length (record/fields target-type)))
+                (every #'(lambda (target-field)
+                           (find-if #'(lambda (source-field)
+                                        (and (funcall *field/name-test*
+                                                      (field/name source-field)
+                                                      (field/name target-field))
+                                             (type/reducible? (field/type source-field)
+                                                              (field/type target-field))))
+                                    (record/fields source-type)))
+                       (record/fields target-type))))
+      (call-next-method)))
 
 ;;; *** function type ***
 
@@ -721,11 +723,11 @@
 
 (defmethod type/reducible? ((source-type abstract-type) (target-type function-type))
   (or (and (type/function? source-type)
-        (type/reducible? (function-type/argument source-type)
-                         (function-type/argument target-type))
-        (type/reducible? (function-type/result source-type)
-                         (function-type/result target-type)))
-     (call-next-method)))
+           (type/reducible? (function-type/argument source-type)
+                            (function-type/argument target-type))
+           (type/reducible? (function-type/result source-type)
+                            (function-type/result target-type)))
+      (call-next-method)))
 
 ;;; *** type properties ***
 
@@ -799,3 +801,4 @@
       (format nil "(~S <- ~S)"
               (object/actual-output-type object)
               (object/actual-input-type object))))
+|#
