@@ -17,22 +17,8 @@
            :initarg :groups
            :initform nil)))
 
-(defmethod initialize-instance :after ((instance object/node) &key event-handler-fn info-string-fn)
-  (let ((event-handler-arg event-handler-fn)
-        (info-string-arg info-string-fn))
-    (with-slots (event-handler-fn info-string-fn) instance
-      (setf event-handler-fn
-         (if event-handler-arg
-             event-handler-arg
-             (make-conjoint-event-handler-function
-              (mapcar #'structural-constraint/node-event-handler-function
-                      *structural-constraints*))))
-      (setf info-string-fn
-         (if info-string-arg
-             info-string-arg
-             (make-conjoint-info-function
-              (mapcar #'info-string-functions-package/node-info-string-function
-                      *info-string-functions-packages*)))))))
+(defun object/node? (object)
+  (typep object 'object/node))
 
 (defmethod object/description-string ((object object/node) &key no-object-class-name)
   (let ((descr (let ((*print-circle* nil))
@@ -50,7 +36,19 @@
   (purpose-equal (object/purpose node) +purpose/regular+))
 
 (defun make-node (label &rest args)
-  (make-object 'object/node (nconc (list :label label) args)))
+  (~object-init-args-handling-let
+      args
+      (structural-constraint/node-properties-constructor-function
+       structural-constraint/node-init-key-arguments
+       structural-constraint/node-event-handler-function
+       info-string-functions-package/node-info-string-function)
+    (make-object 'object/node
+                 (nconc (list :label label
+                              :properties properties-container
+                              :event-handler-fn event-handler-function
+                              :info-string-fn info-string-function)
+                        (alexandria:delete-from-plist
+                         args :label :properties :event-handler-fn :info-string-fn)))))
 
 (defun copy-node (node &rest args)
   (copy-object node (nconc (list :label (node/label node)

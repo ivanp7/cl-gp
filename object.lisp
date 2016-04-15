@@ -15,6 +15,9 @@
                   :initarg :value-copy-fn
                   :initform #'identity)))
 
+(defun object/property? (object)
+  (typep object 'object/property))
+
 (defmethod print-object ((instance object/property) st)
   (print-unreadable-object (instance st)
     (with-slots (key value) instance
@@ -39,27 +42,40 @@
   ((container :initarg :container
               :initform nil)))
 
-(defun properties/all-keys (properties)
-  (if properties
-      (mapcar #'property/key (slot-value properties 'container))))
+(defun object/properties-container? (object)
+  (typep object 'object/properties-container))
+
+
+
+(defun ~properties/container (properties-cntr)
+  (slot-value properties-cntr 'container))
+
+(defun (setf ~properties/container) (new-container properties-cntr)
+  (setf (slot-value properties-cntr 'container) new-container))
+
+
+
+(defun properties/all-keys (properties-cntr)
+  (if properties-cntr
+      (mapcar #'property/key (~properties/container properties-cntr))))
 
 (defmethod print-object ((instance object/properties-container) st)
   (print-unreadable-object (instance st)
     (let ((*print-circle* nil))
       (format st "PROPERTIES-CONTAINER KEYS: ~S" (properties/all-keys instance)))))
 
-(defun properties/add-property! (properties property)
-  (when properties
-    (with-slots (container) properties
+(defun properties/add-property! (properties-cntr property)
+  (when properties-cntr
+    (with-slots (container) properties-cntr
       (let ((old-container container))
         (pushnew property container
                  :key #'property/key
                  :test *property-key-test*)
         (not (eql container old-container))))))
 
-(defun properties/delete-property! (properties key)
-  (when properties
-    (with-slots (container) properties
+(defun properties/delete-property! (properties-cntr key)
+  (when properties-cntr
+    (with-slots (container) properties-cntr
       (let ((old-length (length container)))
         (setf container (delete-if #'(lambda (property)
                                     (funcall *property-key-test*
@@ -68,29 +84,29 @@
                                 :count 1))
         (/= (length container) old-length)))))
 
-(defun properties/get-property (properties key)
-  (when properties
+(defun properties/get-property (properties-cntr key)
+  (when properties-cntr
     (find-if #'(lambda (property)
                  (funcall *property-key-test*
                           (property/key property) key))
-             (slot-value properties 'container))))
+             (~properties/container properties-cntr))))
 
-(defun properties/get-properties-list (properties)
-  (if properties
-      (copy-list (slot-value properties 'container))))
+(defun properties/get-list-of-properties (properties-cntr)
+  (if properties-cntr
+      (copy-list (~properties/container properties-cntr))))
 
-(defun properties/get-property-value (properties key &optional default-value)
-  (let ((property (properties/get-property properties key)))
+(defun properties/get-property-value (properties-cntr key &optional default-value)
+  (let ((property (properties/get-property properties-cntr key)))
     (if property
         (property/value property)
         default-value)))
 
-(defun properties/set-property-value! (properties key new-value)
-  (let ((property (properties/get-property properties key)))
+(defun properties/set-property-value! (properties-cntr key new-value)
+  (let ((property (properties/get-property properties-cntr key)))
     (if property
         (setf (property/value property) new-value)
         (progn
-          (properties/add-property! properties (make-property key new-value))
+          (properties/add-property! properties-cntr (make-property key new-value))
           new-value))))
 
 
@@ -101,9 +117,20 @@
                                                :key #'property/key
                                                :test *property-key-test*)))
 
-(defun copy-properties (properties)
+(defun copy-properties (properties-cntr)
   (make-properties-container (mapcar #'copy-property
-                                     (slot-value properties 'container))))
+                                     (~properties/container properties-cntr))))
+
+(defun adjoin-properties (properties-list)
+  (make-properties-container
+   (reduce #'nconc
+           (delete nil (mapcar #'(lambda (object)
+                                 (cond
+                                   ((object/property? object) object)
+                                   ((object/properties-container? object)
+                                    (properties/get-list-of-properties object))))
+                             properties-list))
+           :from-end t)))
 
 ;;; *** abstract object ***
 
@@ -122,9 +149,11 @@
                :initarg :properties
                :initform nil)
    (event-handler-fn :accessor object/event-handler-function
-                     :initform nil)
+                     :initarg :event-handler-fn
+                     :initform (constantly nil))
    (info-string-fn :accessor object/info-string-function
-                   :initform nil)))
+                   :initarg :info-string-fn
+                   :initform (constantly ""))))
 
 (defgeneric object/description-string (object &key no-object-class-name)
   (:documentation "Generate description string for printing purposes"))

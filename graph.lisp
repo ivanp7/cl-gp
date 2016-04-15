@@ -12,31 +12,8 @@
    (constraint-test-fn :accessor graph/constraint-test-function
                        :initform nil)))
 
-(defmethod initialize-instance :after ((instance object/graph) &key event-handler-fn
-                                                                 info-string-fn
-                                                                 constraint-test-fn)
-  (let ((event-handler-arg event-handler-fn)
-        (info-string-arg info-string-fn)
-        (constraint-test-arg constraint-test-fn))
-    (with-slots (event-handler-fn info-string-fn constraint-test-fn) instance
-      (setf event-handler-fn
-         (if event-handler-arg
-             event-handler-arg
-             (make-conjoint-event-handler-function
-              (mapcar #'structural-constraint/graph-event-handler-function
-                      *structural-constraints*))))
-      (setf info-string-fn
-         (if info-string-arg
-             info-string-arg
-             (make-conjoint-info-function
-              (mapcar #'info-string-functions-package/graph-info-string-function
-                      *info-string-functions-packages*))))
-      (setf constraint-test-fn
-         (if constraint-test-arg
-             constraint-test-arg
-             (make-conjoint-constraint-test-function
-              (mapcar #'structural-constraint/test-function
-                      *structural-constraints*)))))))
+(defun object/graph? (object)
+  (typep object 'object/graph))
 
 (defmethod object/description-string ((object object/graph) &key no-object-class-name)
   (let ((descr (let ((*print-circle* nil))
@@ -609,8 +586,30 @@
 
 
 
+(defmacro ~make-empty-graph (args)
+  `(let ((structural-constraints
+          (getf ,args :structural-constraints *structural-constraints*)))
+     (~object-init-args-handling-let
+         ,args
+         (structural-constraint/graph-properties-constructor-function
+          structural-constraint/graph-init-key-arguments
+          structural-constraint/graph-event-handler-function
+          info-string-functions-package/graph-info-string-function)
+       (make-object 'object/graph
+                    (nconc (list :constraint-test-fn
+                                 (make-conjoint-constraint-test-function
+                                  (cons (getf ,args :constraint-test-fn)
+                                        (mapcar #'structural-constraint/test-function
+                                                structural-constraints)))
+                                 :properties properties-container
+                                 :event-handler-fn event-handler-function
+                                 :info-string-fn info-string-function)
+                           (alexandria:delete-from-plist
+                            ,args :constraint-test-fn
+                            :properties :event-handler-fn :info-string-fn))))))
+
 (defun graph/make-graph (nodes connections &rest args)
-  (let ((graph (make-object 'object/graph args)))
+  (let ((graph (~make-empty-graph args)))
     (graph/add-nodes! graph nodes)
     (graph/connect-set! graph connections)
     graph))
