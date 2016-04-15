@@ -4,31 +4,20 @@
 
 ;;; *** abstract constraint ***
 
-(defclass cps/constraint ()
-  ((value-fn :accessor cps-constraint/inform-about-value-function
-             :initarg :value-fn
-             :initform (constantly nil))
-   (no-value-fn :accessor cps-constraint/inform-about-no-value-function
-                :initarg :no-value-fn
-                :initform (constantly nil))))
+(defclass cps/abstract-constraint ()
+  ())
 
-(defun make-cps-constraint (&key value-fn no-value-fn)
-  (apply (alexandria:curry #'make-instance 'cps/constraint)
-         (nconc (if value-fn (list :value-fn value-fn))
-                (if no-value-fn (list :no-value-fn no-value-fn)))))
+(defun make-cps-constraint (cps-constraint-class &optional args)
+  (apply (alexandria:curry #'make-instance cps-constraint-class) args))
 
-(defun copy-cps-constraint (cps-constraint)
-  (make-cps-constraint
-   :value-fn (cps-constraint/inform-about-value-function cps-constraint)
-   :no-value-fn (cps-constraint/inform-about-no-value-function cps-constraint)))
+(defun copy-cps-constraint (cps-constraint &optional args)
+  (apply (alexandria:curry #'make-instance (type-of constraint)) args))
 
-;; Inform contraint about a new value on a one of the connectors.
-(defun cps-constraint/inform-about-value (constraint)
-  (funcall (slot-value constraint 'value-fn)))
+(defgeneric cps-constraint/inform-about-value (constraint)
+  (:documentation "Inform contraint about a new value on a one of the connectors."))
 
-;; Inform contraint about a loss of value on a one of the connectors.
-(defun cps-constraint/inform-about-no-value (constraint)
-  (funcall (slot-value constraint 'no-value-fn)))
+(defgeneric cps-constraint/inform-about-no-value (constraint)
+  (:documentation "Inform contraint about a loss of value on a one of the connectors."))
 
 ;;; *** abstract connector ***
 
@@ -42,6 +31,9 @@
    (constraint-test-fn :reader cps-connector/constraint-test-function
                        :initarg :constraint-test-fn
                        :initform *constraint-test*)))
+
+(defun make-cps-connector (&optional (constraint-test-fn *constraint-test*))
+  (make-instance 'cps/connector :constraint-test-fn constraint-test-fn))
 
 (defun cps-connector/has-value? (connector)
   (not (null (slot-value connector 'informant))))

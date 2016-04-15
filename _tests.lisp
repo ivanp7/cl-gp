@@ -8,9 +8,13 @@
     (* n (factorial (- n 1))))
 |#
 
+
+
+#|
 (setf *constraints-conjoint-function*
-   (make-conjoint-function (list *feedforward-constraint-function*
-                                 *type-constraint-function*)))
+      (make-conjoint-function (list *disjoint-inputs-constraint-function*
+                                    *feedforward-constraint-function*
+                                    *type-constraint-function*)))
 
 (defparameter *boolean-type* (make-primitive-type 'boolean))
 
@@ -19,114 +23,106 @@
                        :reducibility-test ;;; temporary
                        #'(lambda (type)
                            (and (type/primitive? type)
-                              (type-name-equal (primitive-type/name type) 'number)))))
+                                (type-name-equal (primitive-type/name type) 'number)))))
 (defparameter *number-type*
   (make-primitive-type 'number
                        :reducibility-test
                        #'(lambda (type)
                            (and (type/primitive? type)
-                              (type-name-equal (primitive-type/name type) 'integer)))))
+                                (type-name-equal (primitive-type/name type) 'integer)))))
 
-(setf *module/print-functions-list*
-   (list *name-print-function*
-         (constantly " : ")
-         *type-constraint/module-print-function*))
+(setf *module/info-functions-list*
+      (list *name-print-function*
+            (constantly " : ")
+            *type-constraint/info-function*))
 
-(setf *node/print-functions-list*
-   (list *name-print-function*
-         (constantly " : ")
-         *type-constraint/node-print-function*))
+(setf *node/info-functions-list*
+      (list *name-print-function*
+            (constantly " : ")
+            *type-constraint/info-function*))
 
-(defparameter *world-node/print-functions-list*
-  (list *type-constraint/world-node-print-function*))
+(defparameter *world-node/info-functions-list*
+  (list *type-constraint/world-node-info-function*))
 
 (defparameter *factorial*
   (make-module :wn-properties
                (join-properties
                 (list (make-name-property 'factorial)
                       (make-module-type-properties :input-type *integer-type*
-                                                   :output-type *integer-type*)))))
+                                                   :output-type *integer-type*)))
+               :wn-events-handler-fn
+               (make-sequence-function
+                (list))))
 
 
 
 (graph/add-node!
  (module/graph *factorial*)
  (make-node 1 :properties
-            (make-properties
-             :name 'if
-             :input-type (make-record
-                          (list
-                           (make-field 'condition *boolean-type*)
-                           (make-field 'consequence *top-type*)
-                           (make-field 'alternative *top-type*)))
-             :output-type *top-type*)
-            :setting-of-connection-fn
+            (join-properties
+             (list (make-name-property 'if)
+                   (make-type-properties :input-type (make-record
+                                                      (list
+                                                       (make-field 'condition *boolean-type*)
+                                                       (make-field 'consequence *top-type*)
+                                                       (make-field 'alternative *top-type*)))
+                                         :output-type *top-type*)))
+            :events-handler-fn
             (make-sequence-function
              (list #|#'(lambda (node connection graph)
               (multiple-value-bind (direction label)
               (connection/other-label connection 1)
               (if (or (direction/input? direction)
               (direction/loop? direction))
-              )))|#))
-            :loss-of-connection-fn
-            (make-sequence-function
-             (list #|#'(lambda (node connection graph)
-              )|#))))
+              )))|#))))
 
 (graph/add-node!
  (module/graph *factorial*)
  (make-node 2 :properties
-            (make-properties
-             :name 1
-             :input-type *bottom-type*
-             :output-type *integer-type*)))
+            (join-properties
+             (list (make-name-property 1)
+                   (make-type-properties :input-type *bottom-type*
+                                         :output-type *integer-type*)))))
 
 (graph/add-node!
  (module/graph *factorial*)
  (make-node 3 :properties
-            (make-properties
-             :name 'zerop
-             :input-type *number-type*
-             :output-type *boolean-type*)))
+            (join-properties
+             (list (make-name-property 'zerop)
+                   (make-type-properties :input-type *number-type*
+                                         :output-type *boolean-type*)))))
 
 (graph/add-node!
  (module/graph *factorial*)
  (make-node 4 :properties
-            (make-properties
-             :name '*
-             :input-type (make-record
-                          (list
-                           (make-field 'arg1 *number-type*)
-                           (make-field 'arg2 *number-type*)))
-             :output-type *number-type*)))
+            (join-properties
+             (list (make-name-property '*)
+                   (make-type-properties :input-type (make-record
+                                                      (list
+                                                       (make-field 'arg1 *number-type*)
+                                                       (make-field 'arg2 *number-type*)))
+                                         :output-type *number-type*)))))
 
-(graph/add-node!
- (module/graph *factorial*)
- (make-node 5 :properties
-            (make-properties
-             :name 'factorial
-             :input-type *integer-type*
-             :output-type *integer-type*)
-            :setting-of-connection-fn
-            (make-sequence-function
-             (list #|#'(lambda (node connection graph)
-              (multiple-value-bind (direction label)
-              (connection/other-label connection 1)
-              (if (or (direction/input? direction)
-              (direction/loop? direction))
-              )))|#))
-            :loss-of-connection-fn
-            (make-sequence-function
-             (list #|#'(lambda (node connection graph)
-              )|#))))
+(let ((recursion-node (make-node 5 :events-handler-fn
+                                 (make-sequence-function
+                                  (list #|#'(lambda (node connection graph)
+                                   (multiple-value-bind (direction label)
+                                   (connection/other-label connection 1)
+                                   (if (or (direction/input? direction)
+                                   (direction/loop? direction))
+                                   )))|#)))))
+  (graph/add-node!
+   (module/graph *factorial*)
+   recursion-node)
+  (associate-node-with-module recursion-node *factorial*))
 
 (graph/add-node!
  (module/graph *factorial*)
  (make-node 6 :properties
-            (make-properties
-             :name '1-
-             :input-type *number-type*
-             :output-type *number-type*)))
+            (join-properties
+             (list (make-name-property '1-)
+                   (make-type-properties :input-type *number-type*
+                                         :output-type *number-type*)))))
 
 
 
@@ -165,3 +161,4 @@
 (graph/connect!
  (module/graph *factorial*)
  (make-connection (make-arrow) *world-node-label* 6))
+|#

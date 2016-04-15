@@ -25,7 +25,7 @@
    :name :name
    :info-string-fn-getter
    #'(lambda (kind)
-       (if (not (kind-equal kind +kind/connection+))
+       (if (or (kind-equal kind +kind/node+) (kind-equal kind +kind/graph+))
            #'(lambda (object)
                (let ((*print-circle* nil))
                  (format nil "{NAME ~S}"

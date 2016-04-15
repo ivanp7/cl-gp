@@ -2,6 +2,371 @@
 
 (in-package #:cl-gp)
 
+;;; ****************
+;;; *** entities ***
+;;; ****************
+
+(defgeneric type-entity/reducible? (source-entity target-entity)
+  (:documentation "Test if source entity can be reduced to target entity"))
+
+(defgeneric copy-type-entity (entity)
+  (:documentation "Make deep copy of an entity"))
+
+(defgeneric type-entity/has-associated-entity? (entity)
+  (:documentation "Check if type entity has associated entity"))
+
+(defgeneric type-entity/associated-entity (entity)
+  (:documentation "Get associated entity of type entity"))
+
+(defgeneric type-entity/associate-entity! (entity associated-entity setter)
+  (:documentation "Set associated entity of type entity"))
+
+(defgeneric type-entity/unassociate-entity! (entity retractor)
+  (:documentation "Forget associated entity of type entity"))
+
+(defclass abstract-type-entity ()
+  ((reducibility-test-fn :accessor type-entity/reducibility-test-function
+                         :initarg :reducibility-test-fn
+                         :initform (constantly nil))))
+
+(defmethod type-entity/has-associated-entity? ((entity abstract-type-entity))
+  (declare (ignore entity))
+  t)
+
+(defmethod type-entity/associated-entity ((entity abstract-type-entity))
+  entity)
+
+(defmethod type-entity/associate-entity! ((entity abstract-type-entity) associated-entity setter)
+  (declare (ignore entity associated-entity setter))
+  nil)
+
+(defmethod type-entity/unassociate-entity! ((entity abstract-type-entity) retractor)
+  (declare (ignore entity retractor))
+  nil)
+
+;;; *** value as type ***
+;;; *********************
+
+(defclass value-as-type (abstract-type-entity)
+  ((value :accessor value-as-type/value
+          :initarg :value
+          :initform (error "VALUE-AS-TYPE -- :value parameter must be supplied"))))
+
+(defmethod type-entity/associated-specific-entity ((instance value-as-type))
+  instance)
+
+(defun make-value-as-type-object ()
+  )
+
+;;; *** abstract type ***
+;;; *********************
+
+(defgeneric type/subtype (type part)
+  (:documentation "Extract (select) a part subtype of type"))
+
+(defclass abstract-type-kind (abstract-type-entity)
+  ())
+
+(declaim (type t +bottom-type+))
+
+(defmethod type/subtype ((type abstract-type) part)
+  +bottom-type+)
+
+(defun type/nested-subtype-selection (type selector)
+  (if (null selector)
+      type
+      (type/nested-subtype-selection (type/subtype type (first selector))
+                                     (rest selector))))
+
+;;; *** special types ***
+
+(defun abstract-special-type (abstract-type-kind)
+  )
+
+(defclass bottom-type (abstract-special-type)
+  ())
+
+(defconstant +bottom-type+ ...)
+
+(defclass unit-type (abstract-special-type)
+  ())
+
+(defconstant +unit-type+ ...)
+
+(defclass top-type (abstract-special-type)
+  ())
+
+(defconstant +top-type+ ...)
+
+;;; *** primitive type ***
+
+(defclass object/primitive-type (abstract-type-kind)
+  ())
+
+(defun make-primitive-type-object (name)
+  )
+
+;;; *** record ***
+
+(defclass object/record (abstract-type-kind)
+  ())
+
+(defun make-record-object ()
+  )
+
+;;; *** parametric type ***
+
+(defclass object/parametric-type (abstract-type-kind)
+  ((subtype-selection-fn :accessor parametric-type/subtype-selection-function
+                         :initarg :subtype-selection-fn
+                         :initform (constantly +bottom-type+))))
+
+(defun make-parametric-type-object (name parameters)
+  )
+
+;;; *** function type ***
+
+(defclass object/function-type (abstract-type-kind)
+  ())
+
+(defun make-function-type-object ()
+  )
+
+;;; *** type class ***
+;;; ******************
+
+(defclass object/type-class (abstract-type-entity)
+  (()))
+
+(defun make-type-class-object (&optional (reducibility-test-fn (constantly t)))
+  )
+
+
+(defclass type-variable (abstract-type-entity)
+  ((label :reader type-variable/label
+          :initarg :label
+          :initform (error "TYPE-VARIABLE -- :label parameter must be supplied"))
+   (type-class :reader type-variable/type-class
+               :initarg :type-class
+               :initform (error "TYPE-VARIABLE -- :type-class parameter must be supplied"))
+   (cps-connector :initform (make-cps-connector))))
+
+(defmethod type-entity/has-associated-entity? ((entity type-variable))
+  (cps-connector/has-value? (slot-value entity 'cps-connector)))
+
+(defmethod type-entity/associated-entity ((entity type-variable))
+  (cps-connector/value (slot-value entity 'cps-connector)))
+
+(defmethod type-entity/associate-entity! ((entity type-variable) associated-entity setter)
+  (cps-connector/set-value! (slot-value entity 'cps-connector) associated-entity setter))
+
+(defmethod type-entity/unassociate-entity! ((entity type-variable) retractor)
+  (cps-connector/forget-value! (slot-value entity 'cps-connector) retractor))
+
+
+
+(defun make-type-variable (type-class-object)
+  )
+
+;;; ******************
+;;; *** constraint ***
+;;; ******************
+
+;;; *** CPS constraints ***
+
+(defclass cps-constraint/connection (cps/abstract-constraint)
+  ((source-type-entity :initarg :source)
+   (target-type-entity :initarg :target)))
+
+(defmethod initialize-instance :after ((this cps-constraint/connection) &key)
+  (with-slots (source-type-entity target-type-entity) this
+    (cps-connector/connect! (slot-value source-type-entity 'cps-connector) this)
+    (cps-connector/connect! (slot-value target-type-entity 'cps-connector) this)))
+
+(defmethod destroy-constraint ((this cps-constraint/connection))
+  ...)
+
+(defun make-connection-cps-constraint (source-type-entity target-type-entity)
+  (make-instance 'cps-constraint/connection
+                 :source source-type-entity
+                 :target target-type-entity))
+
+(defmethod cps-constraint/inform-about-value ((this cps-constraint/connection))
+  (with-slots (source-type-entity target-type-entity) this
+    (cond ((type-entity/has-associated-entity? source-type-entity)
+           (type-entity/associate-entity! target-type-entity
+                                          (type-entity/associated-entity
+                                           source-type-entity) this))
+          ((type-entity/has-associated-entity? target-type-entity)
+           (type-entity/associate-entity! source-type-entity
+                                          (type-entity/associated-entity
+                                           target-type-entity) this)))))
+
+(defmethod cps-constraint/inform-about-no-value ((this cps-constraint/connection))
+  (with-slots (source-type-entity target-type-entity) this
+    (type-entity/unassociate-entity! source-type-entity this)
+    (type-entity/unassociate-entity! target-type-entity this)
+    (cps-constraint/inform-about-value this)))
+
+
+
+(defclass cps-constraint/node (cps/abstract-constraint)
+  ((type-variables-list :initarg :type-variables-list)
+   (cps-constraint-fn :initarg :cps-constraint-fn
+                      :initform nil)))
+
+(defmethod initialize-instance :after ((this cps-constraint/node) &key)
+  (with-slots (type-variables-list cps-constraint-fn) this
+    (unless cps-constraint-fn
+      (setf cps-constraint-fn
+         #'(lambda (type-variables-list setter)
+             (let ((set-typevar (find-if #'type-entity/has-associated-entity?
+                                         type-variables-list)))
+               (dolist (typevar type-variables-list)
+                 (type-entity/associate-entity! typevar
+                                                (type-entity/associated-entity set-typevar)
+                                                setter))))))
+    (dolist (typevar type-variables-list)
+      (cps-connector/connect! (slot-value typevar 'cps-connector) this))))
+
+(defmethod destroy-constraint ((this cps-constraint/node))
+  ...)
+
+(defmethod cps-constraint/inform-about-value ((this cps-constraint/node))
+  (with-slots (type-variables-list) this
+    (funcall (slot-value this 'cps-constraint-fn) type-variables-list this)))
+
+(defmethod cps-constraint/inform-about-no-value ((this cps-constraint/node))
+  (with-slots (type-variables-list) this
+    (dolist (typevar type-variables-list)
+      (type-entity/unassociate-entity! typevar this))
+    (cps-constraint/inform-about-value this)))
+
+(defun make-node-cps-constraint (type-variables-list &key cps-constraint-fn)
+  (make-instance 'cps-constraint/node
+                 :type-variables-list type-variables-list
+                 :cps-constraint-fn cps-constraint-fn))
+
+;;; *** generic ***
+
+(defun object/input-type (object)
+  (object/get-property-value object :input-type +bottom-type+))
+
+(defun object/output-type (object)
+  (object/get-property-value object :output-type +bottom-type+))
+
+(defun object/type (object direction)
+  (cond
+    ((direction/input? direction) (object/input-type object))
+    ((direction/output? direction) (object/output-type object))
+    (t (error "OBJECT/TYPE -- incorrect direction ~S is supplied" direction))))
+
+(defun object/internal-type-cps-constraints (object)
+  (object/get-property-value object :internal-type-cps-constraints))
+
+(defun make-internal-type-variables-constraint (type-variables-list &key cps-constraint-fn)
+  (make-node-cps-constraint type-variables-list
+                            :cps-constraint-fn cps-constraint-fn))
+
+
+
+(defparameter *strong-typing-enabled* t)
+
+(defparameter *strong-typing-constraint*
+  (make-structural-constraint
+   :name 'strong-typing
+   :constraint-test-fn
+   #'(lambda (source-node target-node connection graph)
+       (declare (ignore graph))
+       (or (not *strong-typing-enabled*)
+          (let ((source-entity (type/nested-subtype-selection
+                                (object/output-type source-node)
+                                (arrow/source-selector (connection/arrow connection))))
+                (target-entity (type/nested-subtype-selection
+                                (object/input-type target-node)
+                                (arrow/target-selector (connection/arrow connection)))))
+            (type-entity/reducible? source-entity target-entity))))
+   :event-handler-fn-getter
+   #'(lambda (kind)
+       (alexandria:switch (kind :test #'kind-equal)
+         (+kind/node+ #'(lambda (node event &key graph) ...))
+         (+kind/connection+ #'(lambda (connection event &key source target graph) ...))
+         (+kind/graph+ #'(lambda (graph event &key node connection source target) ...))
+         (t (constantly nil))))
+   :init-args-getter
+   #'(lambda (kind)
+       (if (kind-equal kind +kind/node+)
+           '(:input-type :output-type :internal-type-variables-constraints-list)))
+   :properties-constr-fn-getter
+   #'(lambda (kind)
+       (alexandria:switch (kind :test #'kind-equal)
+         (+kind/node+
+          #'(lambda (&key (input-type +bottom-type+) (output-type +bottom-type+)
+                  internal-type-variables-constraints-list)
+              (make-properties-container
+               (list (make-property :input-type input-type
+                                    :value-copy-fn #'copy-type-entity)
+                     (make-property :output-type output-type
+                                    :value-copy-fn #'copy-type-entity)
+                     (make-property :internal-type-variables-constraints-list
+                                    internal-type-variables-constraints-list
+                                    :value-copy-fn #'copy-cps-constraint)))))
+         (+kind/connection+
+          #'(lambda ()
+              (make-properties-container
+               (list (make-property :input-type +bottom-type+
+                                    :value-copy-fn (constantly +bottom-type+))
+                     (make-property :output-type +bottom-type+
+                                    :value-copy-fn (constantly +bottom-type+))
+                     (make-property :internal-type-variables-constraint
+                                    (make-cps-constraint
+                                     :value-fn #'(lambda ()
+                                                   )
+                                     :no-value-fn #'(lambda ()
+                                                      ))
+                                    :value-copy-fn #'copy-cps-constraint)))))
+         (+kind/graph+
+          #'(lambda ()
+              (make-properties-container
+               (list (make-property :input-type +bottom-type+
+                                    :value-copy-fn (constantly +bottom-type+))
+                     (make-property :output-type +bottom-type+
+                                    :value-copy-fn (constantly +bottom-type+))))))
+         (t (constantly nil))))))
+
+(defparameter *type-info-string-function-getter-container*
+  (make-info-string-function-getter-container
+   :name :type
+   :info-string-fn-getter
+   #'(lambda (kind)
+       (declare (ignore kind))
+       #'(lambda (object)
+           (let ((*print-circle* nil))
+             (format nil "{TYPE ~S -> ~S}"
+                     (object/input-type object)
+                     (object/output-type object)))))))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (defparameter *type/name-test* #'eql)
 
 (defun type-name-equal (name1 name2)
@@ -14,7 +379,10 @@
                                     (equalp source-value target-value)))
 
 (defclass abstract-type ()
-  ((reducibility-test :reader type/reducibility-test
+  ((concretized-type :reader type/specialized-type
+                     :initarg :concretized-type
+                     :initform nil)
+   (reducibility-test :reader type/reducibility-test
                       :initarg :reducibility-test
                       :initform (constantly nil))
    (value-test :reader type/value-test
@@ -35,6 +403,9 @@
 (defun type-object? (object)
   (typep object 'abstract-type))
 
+(defgeneric type/specialized-type (type)
+  (:documentation "Get concretized type for this type"))
+
 (defgeneric type/reducible? (source-type target-type)
   (:documentation "Test if source-type can be reduced to target-type"))
 
@@ -43,6 +414,27 @@
 
 (defmethod type/subtype ((type abstract-type) part)
   (error "TYPE/SUBTYPE -- attempt to select subtype on a indivisible type"))
+
+;;; *** indeterminate type ***
+
+(defclass indeterminate-type (abstract-type)
+  ((concretized-type :reader indeterminate-type/concretized-type
+                     :initarg :concretized-type
+                     :initform nil)))
+
+;;; *** top type ***
+
+(defclass top-type (indeterminate-type)
+  ())
+
+(defmethod print-object ((instance top-type) st)
+  (print-unreadable-object (instance st)
+    (format st "TOP-TYPE")))
+
+(defun type/top? (type)
+  (typep type 'top-type))
+
+(defparameter *top-type* (make-instance 'top-type))
 
 ;;; *** bottom type ***
 
@@ -72,19 +464,7 @@
 
 (defparameter *unit-type* (make-instance 'unit-type))
 
-;;; *** top type ***
 
-(defclass top-type (abstract-type)
-  ())
-
-(defmethod print-object ((instance top-type) st)
-  (print-unreadable-object (instance st)
-    (format st "TOP-TYPE")))
-
-(defun type/top? (type)
-  (typep type 'top-type))
-
-(defparameter *top-type* (make-instance 'top-type))
 
 ;;; *** reducibility test ***
 
@@ -273,21 +653,20 @@
 (defmethod print-object ((instance record) st)
   (print-unreadable-object (instance st)
     (with-slots (fields) instance
-      (format st "RECORD ~S" fields))))
+      (format st "RECORD FIELDS: ~S" fields))))
 
 (defun make-record (fields-list &key (reducibility-test (constantly nil))
                                   (value-test *type/value-test*) properties)
-  (case (length fields-list)
-    (0 *bottom-type*)
-    (1 (field/type (first fields-list)))
-    (t (if (= (length fields-list)
-              (length (remove-duplicates fields-list
-                                         :key #'field/name
-                                         :test *field/name-test*)))
-           (make-instance 'record :fields fields-list
-                          :reducibility-test reducibility-test
-                          :value-test value-test :properties properties)
-           (error "MAKE-RECORD -- record cannot have fields with identical names")))))
+  (if (zerop (length fields-list))
+      *bottom-type*
+      (if (= (length fields-list)
+             (length (remove-duplicates fields-list
+                                        :key #'field/name
+                                        :test *field/name-test*)))
+          (make-instance 'record :fields fields-list
+                         :reducibility-test reducibility-test
+                         :value-test value-test :properties properties)
+          (error "MAKE-RECORD -- record cannot have fields with identical names"))))
 
 (defun type/record? (type)
   (typep type 'record))
@@ -351,25 +730,42 @@
 ;;; *** type properties ***
 
 (defun make-type-properties (&key input-type output-type)
-  (apply #'make-properties (nconc (if input-type (list :input-type input-type))
-                                  (if output-type (list :output-type output-type)))))
+  (apply #'make-properties (nconc (if input-type (list :original-input-type input-type))
+                                  (if output-type (list :original-output-type output-type)))))
 
 (defun make-module-type-properties (&key input-type output-type)
   (make-type-properties :input-type output-type :output-type input-type))
 
-;;; *** type readers ***
+;;; *** type getters ***
 
-(defun node/input-type (node)
-  (get-property (node/properties node) :input-type *bottom-type*))
-
-(defun node/output-type (node)
-  (get-property (node/properties node) :output-type *bottom-type*))
-
-(defun module/input-type (module)
-  (get-property (module/world-node-properties module) :output-type *bottom-type*))
-
-(defun module/output-type (module)
-  (get-property (module/world-node-properties module) :input-type *bottom-type*))
+(macrolet ((define-type-getter (fn-name key default opp-key opp-default error-msg)
+             `(defun ,fn-name (object)
+                (cond
+                  ((object/node? object)
+                   (if (node/primitive? object)
+                       (get-property (node/properties object) ,key ,default)
+                       (get-property (node/active-properties object)
+                                     ,opp-key ,opp-default)))
+                  ((object/module? object)
+                   (get-property (module/world-node-properties object)
+                                 ,opp-key ,opp-default))
+                  (t (error ,error-msg))))))
+  (define-type-getter object/original-input-type
+      :original-input-type *bottom-type*
+      :original-output-type *bottom-type*
+      "OBJECT/ORIGINAL-INPUT-TYPE -- unknown object type")
+  (define-type-getter object/original-output-type
+      :original-output-type *bottom-type*
+      :original-input-type *bottom-type*
+      "OBJECT/ORIGINAL-OUTPUT-TYPE -- unknown object type")
+  (define-type-getter object/actual-input-type
+      :actual-input-type (object/original-input-type object)
+      :actual-output-type (object/original-output-type object)
+      "OBJECT/ACTUAL-INPUT-TYPE -- unknown object type")
+  (define-type-getter object/actual-output-type
+      :actual-output-type (object/original-output-type object)
+      :actual-input-type (object/original-input-type object)
+      "OBJECT/ACTUAL-OUTPUT-TYPE -- unknown object type"))
 
 ;;; *** type constraint ***
 
@@ -380,30 +776,26 @@
                              (rest selector))))
 
 (defparameter *type-constraint-function*
-  #'(lambda (source-node target-node arrow graph)
+  #'(lambda (source-node target-node connection graph)
       (declare (ignore graph))
-      (let ((source-type (type/nested-selection (node/output-type source-node)
+      (let ((source-type (type/nested-selection (object/actual-output-type source-node)
                                                 (arrow/source-selector arrow)))
-            (target-type (type/nested-selection (node/input-type target-node)
+            (target-type (type/nested-selection (object/actual-input-type target-node)
                                                 (arrow/target-selector arrow))))
         (type/reducible? source-type target-type))))
 
 ;;; *** print functions ***
 
-(defparameter *type-constraint/node-print-function*
-  #'(lambda (plist)
+(defparameter *type-constraint/info-function*
+  #'(lambda (object properties)
+      (declare (ignore properties))
       (format nil "(~S -> ~S)"
-              (getf plist :input-type)
-              (getf plist :output-type))))
+              (object/actual-input-type object)
+              (object/actual-output-type object))))
 
-(defparameter *type-constraint/world-node-print-function*
-  #'(lambda (plist)
+(defparameter *type-constraint/world-node-info-function*
+  #'(lambda (object properties)
+      (declare (ignore properties))
       (format nil "(~S <- ~S)"
-              (getf plist :output-type)
-              (getf plist :input-type))))
-
-(defparameter *type-constraint/module-print-function*
-  #'(lambda (plist)
-      (format nil "(~S -> ~S)"
-              (getf plist :input-type)
-              (getf plist :output-type))))
+              (object/actual-output-type object)
+              (object/actual-input-type object))))
