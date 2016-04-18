@@ -275,7 +275,7 @@
 (defparameter *strong-typing-constraint*
   (make-structural-constraint
    :name 'strong-typing
-   :constraint-test-fn
+   :constraint-connection-test-fn
    #'(lambda (source-node target-node connection graph)
        (declare (ignore graph))
        (or (not *strong-typing-enabled*)

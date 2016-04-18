@@ -11,9 +11,13 @@
    (info-string-getter :accessor structural-constraint/info-string-getter
                        :initarg :info-string-getter
                        :initform (constantly ""))
-   (constraint-test-fn
-    :accessor structural-constraint/test-function
-    :initarg :constraint-test-fn
+   (constraint-node-test-fn
+    :accessor structural-constraint/node-test-function
+    :initarg :constraint-node-test-fn
+    :initform nil)
+   (constraint-connection-test-fn
+    :accessor structural-constraint/connection-test-function
+    :initarg :constraint-connection-test-fn
     :initform nil)
    (event-handler-fn-getter
     :accessor structural-constraint/event-handler-function-getter
@@ -43,7 +47,10 @@
   (make-structural-constraint
    :name (structural-constraint/name constraint)
    :info-string-getter (structural-constraint/info-string-getter constraint)
-   :constraint-test-fn (structural-constraint/test-function constraint)
+   :constraint-node-test-fn
+   (structural-constraint/node-test-function constraint)
+   :constraint-connection-test-fn
+   (structural-constraint/connection-test-function constraint)
    :event-handler-fn-getter
    (structural-constraint/event-handler-function-getter constraint)
    :init-args-getter
@@ -138,14 +145,14 @@
                                        constraint) ,object-kind)))
                              (if fn fn (constantly nil)))
                            (iterate:iter
-                             (with keys = (funcall
-                                           (structural-constraint/init-key-arguments-getter
-                                            constraint) ,object-kind))
-                             (for tail initially ,args then (cddr tail))
-                             (while (cddr tail))
-                             (when (member (caddr tail) keys)
-                               (nconcing (list (caddr tail) (cadddr tail)))
-                               (setf (cddr tail) (cddddr tail))))))
+                            (with keys = (funcall
+                                          (structural-constraint/init-key-arguments-getter
+                                           constraint) ,object-kind))
+                            (for tail initially ,args then (cddr tail))
+                            (while (cddr tail))
+                            (when (member (caddr tail) keys)
+                              (nconcing (list (caddr tail) (cadddr tail)))
+                              (setf (cddr tail) (cddddr tail))))))
                       ,structural-constraints))))
             (,args (cddr ,args))
             (event-handler-function

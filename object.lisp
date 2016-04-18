@@ -4,16 +4,34 @@
 
 ;;; *** property ***
 
+(alexandria:define-constant +property/writable+
+    #'(lambda (old-value new-value)
+        (declare (ignore old-value))
+        new-value)
+  :test (constantly t))
+
+(alexandria:define-constant +property/read-only+
+    #'(lambda (old-value new-value)
+        (declare (ignore new-value))
+        old-value)
+  :test (constantly t))
+
 (defclass object/property ()
   ((key :reader property/key
         :initarg :key
         :initform (error "PROPERTY -- :key parameter must be supplied"))
-   (value :accessor property/value
+   (value :reader property/value
           :initarg :value
           :initform nil)
    (value-copy-fn :accessor property/value-copy-function
                   :initarg :value-copy-fn
-                  :initform #'identity)))
+                  :initform #'identity)
+   (value-setting-fn :accessor property/value-setting-function
+                     :initarg :value-setting-fn
+                     :initform +property/writable+)
+   (on-value-setting-event-fn-alist :accessor property/on-value-setting-event-functions-alist
+                                    :initarg :on-value-setting-event-fn-alist
+                                    :initform nil)))
 
 (defun object/property? (object)
   (typep object 'object/property))
@@ -32,7 +50,31 @@
   (make-property (property/key property)
                  (funcall (property/value-copy-function property)
                           (property/value property))
-                 :value-copy-fn (property/value-copy-function property)))
+                 :value-copy-fn (property/value-copy-function property)
+                 :value-setting-fn (property/value-setting-function property)
+                 :on-value-setting-event-fn-alist
+                 (copy-list (property/on-value-setting-event-functions-alist property))))
+
+(defun (setf property/value) (new-value property)
+  (with-slots (value value-setting-fn on-value-setting-event-fn-alist) property
+    (setf value (funcall value-setting-fn value new-value))
+    (dolist (element on-value-setting-event-fn-alist)
+      (funcall (cdr element) value))
+    value))
+
+
+
+(defun make-fn-alist-entry (setter unique-id func)
+  (cons (cons setter unique-id) func))
+
+(defun fn-alist-entry/setter (entry)
+  (caar entry))
+
+(defun fn-alist-entry/unique-id (entry)
+  (cdar entry))
+
+(defun fn-alist-entry/func (entry)
+  (cdr entry))
 
 ;;; *** properties ***
 
@@ -185,7 +227,8 @@
 
 (defmethod print-object ((instance abstract-object) st)
   (print-unreadable-object (instance st)
-    (format st (object/description-string instance))))
+    (let ((*print-circle* nil))
+      (format st (object/description-string instance)))))
 
 
 

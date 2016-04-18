@@ -4,17 +4,17 @@
 
 ;;; *** selector ***
 
-(defun make-selector (tags-list)
-  (copy-list tags-list))
+(defclass abstract-selector ()
+  ())
 
-(defun copy-selector (selector)
-  (copy-list selector))
+(defgeneric selector/description-string (selector)
+  (:documentation "Get selector description string"))
 
-(defparameter *tag-test* #'eql)
+(defgeneric copy-selector (selector)
+  (:documentation "Copy selector object"))
 
-(defun selector-equal (sel1 sel2)
-  (and (= (length sel1) (length sel2))
-     (every *tag-test* sel1 sel2)))
+(defgeneric selector-equal (selector1 selector2)
+  (:documentation "Test if selectors are equal"))
 
 ;;; *** arrow ***
 
@@ -28,9 +28,10 @@
 
 (defun arrow/description-string (arrow &key no-object-class-name)
   (with-slots (source-selector target-selector) arrow
-    (let ((descr (let ((*print-circle* nil))
-                   (format nil "~:S -> ~:S"
-                           source-selector target-selector))))
+    (let ((descr (concatenate 'string
+                              (selector/description-string source-selector)
+                              " -> "
+                              (selector/description-string target-selector))))
       (if no-object-class-name
           descr
           (concatenate 'string "ARROW " descr)))))
@@ -93,18 +94,18 @@
   (purpose-equal (object/purpose connection) +purpose/regular+))
 
 (define-description-string-method object/connection
-  (let ((*print-circle* nil))
-    (with-slots (source target arrow purpose properties info-string-fn) object
-      (let ((info (funcall info-string-fn object)))
-        (concatenate 'string
-                     (format nil "~S [~S]~A[~S]"
-                             purpose
-                             source
-                             (funcall (connection/arrow->string object)
-                                      arrow purpose)
-                             target)
-                     (if (plusp (length info)) " " "")
-                     info)))))
+    (let ((*print-circle* nil))
+      (with-slots (source target arrow purpose properties info-string-fn) object
+        (let ((info (funcall info-string-fn object)))
+          (concatenate 'string
+                       (format nil "~S [~S]~A[~S]"
+                               purpose
+                               source
+                               (funcall (connection/arrow->string object)
+                                        arrow purpose)
+                               target)
+                       (if (plusp (length info)) " " "")
+                       info)))))
 
 
 

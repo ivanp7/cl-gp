@@ -11,7 +11,7 @@
   (apply (alexandria:curry #'make-instance cps-constraint-class) args))
 
 (defun copy-cps-constraint (cps-constraint &optional args)
-  (apply (alexandria:curry #'make-instance (type-of constraint)) args))
+  (apply (alexandria:curry #'make-instance (type-of cps-constraint)) args))
 
 (defgeneric cps-constraint/inform-about-value (constraint)
   (:documentation "Inform contraint about a new value on a one of the connectors."))
@@ -71,7 +71,7 @@
 (defun cps-connector/disconnect! (connector old-constraint)
   (with-slots (constraints constraint-test-fn) connector
     (setf constraints (delete old-constraint constraints
-                           :test constraint-test-fn :count 1))
+                              :test constraint-test-fn :count 1))
     (when (cps-connector/has-value? connector)
       (cps-constraint/inform-about-no-value old-constraint))
     t))

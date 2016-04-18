@@ -9,34 +9,35 @@
 |#
 
 (setf *structural-constraints*
-   (list *name-constraint*))
+   (list *name-functionality*))
 
 (setf *info-string-function-getter-containers*
    (list *name-info-string-function-getter-container*))
 
-;;; РЕАЛИЗОВАТЬ ВНЕШНИЙ REF-SOURCE УЗЕЛ ГРАФА !!!!
-;;; ПЕРЕНЕСТИ arrow и селекторы из connection.lisp и реализовать как внешние свойства
-
 (defparameter *factorial*
   (graph/make-graph
-   (list (make-node 0 :purpose +purpose/reference-source+ :name 'factorial)
+   (list (make-reference-master-source-node 0 :name 'factorial)
          (make-node 1 :name 'if)
          (make-node 2 :name 1)
          (make-node 3 :name 'zerop)
          (make-node 4 :name '*)
-         (make-node 5 :purpose +purpose/reference-target+)
+         (make-reference-target-node 5)
          (make-node 6 :name '1-))
    (list (make-reference-connection 0 5)
          (make-connection 1 0 :arrow (make-arrow))
-         (make-connection 2 1 :arrow (make-arrow :target-selector '(consequence)))
-         (make-connection 3 1 :arrow (make-arrow :target-selector '(condition)))
+         (make-connection 2 1 :arrow (make-arrow :target-selector
+                                                 (make-data-field-selector '(consequence))))
+         (make-connection 3 1 :arrow (make-arrow :target-selector
+                                                 (make-data-field-selector '(condition))))
          (make-connection 0 3 :arrow (make-arrow))
-         (make-connection 4 1 :arrow (make-arrow :target-selector '(alternative)))
-         (make-connection 0 4 :arrow (make-arrow :target-selector '(arg1)))
-         (make-connection 5 4 :arrow (make-arrow :target-selector '(arg2)))
+         (make-connection 4 1 :arrow (make-arrow :target-selector
+                                                 (make-data-field-selector '(alternative))))
+         (make-connection 0 4 :arrow (make-arrow :target-selector
+                                                 (make-data-field-selector '(arg1))))
+         (make-connection 5 4 :arrow (make-arrow :target-selector
+                                                 (make-data-field-selector '(arg2))))
          (make-connection 6 5 :arrow (make-arrow))
-         (make-connection 0 6 :arrow (make-arrow)))
-   :name 'factorial))
+         (make-connection 0 6 :arrow (make-arrow)))))
 
 #|
 (setf *constraints-conjoint-function*

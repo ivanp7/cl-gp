@@ -9,9 +9,12 @@
               :initform (cl-graph:make-graph
                          'cl-graph:graph-container
                          :default-edge-type :directed))
-   (constraint-test-fn :accessor graph/constraint-test-function
-                       :initarg :constraint-test-fn
-                       :initform nil)))
+   (constraint-node-test-fn :accessor graph/constraint-node-test-function
+                            :initarg :constraint-node-test-fn
+                            :initform nil)
+   (constraint-connection-test-fn :accessor graph/constraint-connection-test-function
+                                  :initarg :constraint-connection-test-fn
+                                  :initform nil)))
 
 (defconstant +kind/graph+ 'graph)
 
@@ -196,10 +199,13 @@
 
 
 
-(defun graph/add-node! (graph node &key node-event-handler-fn)
+(defun graph/add-node! (graph node &key (constraint-node-test-fn
+                                         (graph/constraint-node-test-function graph))
+                                     node-event-handler-fn)
   (if node
       (let ((vertex (~graph/vertex graph (node/label node))))
-        (when (null vertex)
+        (when (and (null vertex)
+                 (funcall constraint-node-test-fn node graph))
           (cl-graph:add-vertex (~graph/container graph) node)
           (funcall (if node-event-handler-fn
                        node-event-handler-fn
@@ -211,10 +217,13 @@
                    :node node)
           t))))
 
-(defun graph/add-nodes! (graph nodes &key node-event-handler-fn)
+(defun graph/add-nodes! (graph nodes &key (constraint-node-test-fn
+                                           (graph/constraint-node-test-function graph))
+                                       node-event-handler-fn)
   (iterate:iter (for node in nodes)
                 (counting (graph/add-node!
                            graph node
+                           :constraint-node-test-fn constraint-node-test-fn
                            :node-event-handler-fn node-event-handler-fn))))
 
 (defun ~graph/signal-node-deletion-event (graph vertex node-event-handler-fn
@@ -300,6 +309,31 @@
                            :node-event-handler-fn node-event-handler-fn
                            :connection-event-handler-fn connection-event-handler-fn
                            :adjacent-node-event-handler-fn adjacent-node-event-handler-fn))))
+
+
+
+(defun graph/fitting-node? (graph node &key (constraint-node-test-fn
+                                             (graph/constraint-node-test-function graph)))
+  (funcall constraint-node-test-fn node graph))
+
+(defun graph/revise-node! (graph label &key (constraint-node-test-fn
+                                             (graph/constraint-node-test-function graph)))
+  (unless (graph/fitting-node?
+           graph (graph/node graph label)
+           :constraint-node-test-fn constraint-node-test-fn)
+    (graph/delete-node! graph label)))
+
+(defun graph/revise-nodes! (graph labels-list &key (constraint-node-test-fn
+                                                    (graph/constraint-node-test-function graph)))
+  (iterate:iter (for label in labels-list)
+                (counting (graph/revise-node!
+                           graph label
+                           :constraint-node-test-fn constraint-node-test-fn))))
+
+(defun graph/revise-all-nodes! (graph &key (constraint-node-test-fn
+                                            (graph/constraint-node-test-function graph)))
+  (graph/revise-nodes! graph (mapcar #'node/label (graph/all-nodes graph))
+                       :constraint-node-test-fn constraint-node-test-fn))
 
 
 
@@ -444,8 +478,8 @@
                            (connection/target-label connection))))
     (~edge-container/connection-present? (cl-graph:element edge) connection)))
 
-(defun graph/connect! (graph connection &key (constraint-test-fn
-                                              (graph/constraint-test-function graph))
+(defun graph/connect! (graph connection &key (constraint-connection-test-fn
+                                              (graph/constraint-connection-test-function graph))
                                           node-event-handler-fn
                                           connection-event-handler-fn)
   (when (object/purpose connection)
@@ -453,7 +487,7 @@
         (~graph/edge graph (connection/source-label connection)
                      (connection/target-label connection))
       (when (and (and src-vertex tgt-vertex)
-               (funcall constraint-test-fn
+               (funcall constraint-connection-test-fn
                         (cl-graph:element src-vertex)
                         (cl-graph:element tgt-vertex)
                         connection graph))
@@ -486,14 +520,14 @@
                  :target (cl-graph:element tgt-vertex))
         t))))
 
-(defun graph/connect-set! (graph connections &key (constraint-test-fn
-                                                   (graph/constraint-test-function graph))
+(defun graph/connect-set! (graph connections &key (constraint-connection-test-fn
+                                                   (graph/constraint-connection-test-function graph))
                                                node-event-handler-fn
                                                connection-event-handler-fn)
   (iterate:iter (for conn in connections)
                 (counting (graph/connect!
                            graph conn
-                           :constraint-test-fn constraint-test-fn
+                           :constraint-connection-test-fn constraint-connection-test-fn
                            :node-event-handler-fn node-event-handler-fn
                            :connection-event-handler-fn connection-event-handler-fn))))
 
@@ -543,36 +577,39 @@
 
 
 (defun graph/fitting-connection? (graph connection
-                                  &key (constraint-test-fn
-                                        (graph/constraint-test-function graph)))
+                                  &key (constraint-connection-test-fn
+                                        (graph/constraint-connection-test-function graph)))
   (let ((source-node (graph/node graph (connection/source-label connection)))
         (target-node (graph/node graph (connection/target-label connection))))
     (if (and source-node target-node)
-        (funcall constraint-test-fn source-node target-node connection graph))))
+        (funcall constraint-connection-test-fn source-node target-node connection graph))))
 
 (defun graph/revise-connection! (graph connection
-                                 &key (constraint-test-fn
-                                       (graph/constraint-test-function graph)))
-  (unless (graph/fitting-connection? graph connection :constraint-test-fn constraint-test-fn)
+                                 &key (constraint-connection-test-fn
+                                       (graph/constraint-connection-test-function graph)))
+  (unless (graph/fitting-connection?
+           graph connection
+           :constraint-connection-test-fn constraint-connection-test-fn)
     (graph/disconnect! graph connection)))
 
 (defun graph/revise-connections! (graph connections
-                                  &key (constraint-test-fn
-                                        (graph/constraint-test-function graph)))
+                                  &key (constraint-connection-test-fn
+                                        (graph/constraint-connection-test-function graph)))
   (iterate:iter (for conn in connections)
                 (counting (graph/revise-connection!
-                           graph conn :constraint-test-fn constraint-test-fn))))
+                           graph conn
+                           :constraint-connection-test-fn constraint-connection-test-fn))))
 
 (defun graph/revise-related-connections! (graph labels-list
-                                          &key (constraint-test-fn
-                                                (graph/constraint-test-function graph)))
+                                          &key (constraint-connection-test-fn
+                                                (graph/constraint-connection-test-function graph)))
   (graph/revise-connections! graph (graph/related-connections graph labels-list)
-                             :constraint-test-fn constraint-test-fn))
+                             :constraint-connection-test-fn constraint-connection-test-fn))
 
-(defun graph/revise-all-connections! (graph &key (constraint-test-fn
-                                                  (graph/constraint-test-function graph)))
+(defun graph/revise-all-connections! (graph &key (constraint-connection-test-fn
+                                                  (graph/constraint-connection-test-function graph)))
   (graph/revise-connections! graph (graph/all-connections graph)
-                             :constraint-test-fn constraint-test-fn))
+                             :constraint-connection-test-fn constraint-connection-test-fn))
 
 
 
@@ -600,24 +637,31 @@
 
 
 (defmacro ~make-empty-graph (args)
-  `(let ((constraint-test-fn
+  `(let ((constraint-node-test-fn
           (make-conjoint-constraint-test-function
-           (cons (getf ,args :constraint-test-fn)
-                 (mapcar #'structural-constraint/test-function
+           (cons (getf ,args :constraint-node-test-fn)
+                 (mapcar #'structural-constraint/node-test-function
+                         (getf ,args :structural-constraints
+                               *structural-constraints*)))))
+         (constraint-connection-test-fn
+          (make-conjoint-constraint-test-function
+           (cons (getf ,args :constraint-connection-test-fn)
+                 (mapcar #'structural-constraint/connection-test-function
                          (getf ,args :structural-constraints
                                *structural-constraints*))))))
      (~object-init-args-handling-let (+kind/graph+ ,args)
        (make-object 'object/graph
-                    (nconc (list :constraint-test-fn constraint-test-fn
+                    (nconc (list :constraint-node-test-fn constraint-node-test-fn
+                                 :constraint-connection-test-fn constraint-connection-test-fn
                                  :properties properties-container
                                  :event-handler-fn event-handler-function
                                  :info-string-fn info-string-function)
                            (alexandria:delete-from-plist
-                            ,args :constraint-test-fn
+                            ,args :constraint-connection-test-fn
                             :properties :event-handler-fn :info-string-fn))))))
 
 (defun graph/make-graph (nodes connections &rest args)
-  (let ((graph (~make-mpty-graph args)))
+  (let ((graph (~make-empty-graph args)))
     (graph/add-nodes! graph nodes)
     (graph/connect-set! graph connections)
     graph))
@@ -626,8 +670,10 @@
   (let* ((nodes (mapcar #'copy-node (graph/all-nodes graph)))
          (connections (mapcar #'copy-connection (graph/all-connections graph)))
          (new-graph (copy-object graph
-                                 (nconc (list :constraint-test-fn
-                                              (graph/constraint-test-function graph))
+                                 (nconc (list :constraint-node-test-fn
+                                              (graph/constraint-node-test-function graph)
+                                              :constraint-connection-test-fn
+                                              (graph/constraint-connection-test-function graph))
                                         args))))
     (graph/add-nodes! new-graph nodes)
     (graph/connect-set! new-graph connections)
@@ -640,8 +686,10 @@
                               (graph/internal-connections graph existing-labels)))
          (subgraph
           (copy-object
-           graph (nconc (list :constraint-test-fn
-                              (graph/constraint-test-function graph)
+           graph (nconc (list :constraint-node-test-fn
+                              (graph/constraint-node-test-function graph)
+                              :constraint-connection-test-fn
+                              (graph/constraint-connection-test-function graph)
                               :properties
                               (let ((properties-transfer-fn
                                      (getf args :properties-transfer-fn (constantly nil))))
