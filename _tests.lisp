@@ -8,11 +8,11 @@
     (* n (factorial (- n 1))))
 |#
 
-(setf *structural-constraints*
+(setf *functionality-modules*
    (list *name-functionality*))
 
-(setf *info-string-function-getter-containers*
-   (list *name-info-string-function-getter-container*))
+(setf *functionality-info-string-function-packages*
+   (list *name-info-string-function-package*))
 
 (defparameter *factorial*
   (graph/make-graph

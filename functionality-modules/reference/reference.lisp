@@ -48,7 +48,7 @@
 
 
 (defparameter *reference-functionality*
-  (make-structural-constraint
+  (make-functionality-module
    :name 'reference-functionality
    :constraint-node-test-fn
    #'(lambda (node graph)

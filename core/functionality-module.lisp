@@ -2,61 +2,61 @@
 
 (in-package #:cl-gp)
 
-(defparameter *structural-constraints* nil)
+(defparameter *functionality-modules* nil)
 
-(defclass object/structural-constraint ()
-  ((name :accessor structural-constraint/name
+(defclass functionality-module ()
+  ((name :accessor functionality-module/name
          :initarg :name
          :initform nil)
-   (info-string-getter :accessor structural-constraint/info-string-getter
-                       :initarg :info-string-getter
-                       :initform (constantly ""))
+   (info-string-fn :accessor functionality-module/info-string-function
+                   :initarg :info-string-fn
+                   :initform (constantly ""))
    (constraint-node-test-fn
-    :accessor structural-constraint/node-test-function
+    :accessor functionality-module/node-test-function
     :initarg :constraint-node-test-fn
     :initform nil)
    (constraint-connection-test-fn
-    :accessor structural-constraint/connection-test-function
+    :accessor functionality-module/connection-test-function
     :initarg :constraint-connection-test-fn
     :initform nil)
    (event-handler-fn-getter
-    :accessor structural-constraint/event-handler-function-getter
+    :accessor functionality-module/event-handler-function-getter
     :initarg :event-handler-fn-getter
     :initform (constantly nil))
    (init-args-getter
-    :accessor structural-constraint/init-key-arguments-getter
+    :accessor functionality-module/init-key-arguments-getter
     :initarg :init-args-getter
     :initform (constantly nil))
    (properties-constr-fn-getter
-    :accessor structural-constraint/properties-constructor-function-getter
+    :accessor functionality-module/properties-constructor-function-getter
     :initarg :properties-constr-fn-getter
     :initform (constantly nil))))
 
-(defmethod print-object ((instance object/structural-constraint) st)
+(defmethod print-object ((instance functionality-module) st)
   (print-unreadable-object (instance st)
-    (with-slots (name info-string-getter) instance
-      (let ((info (funcall info-string-getter)))
-        (format st "STRUCTURAL-CONSTRAINT ~S~A~A" name
+    (with-slots (name info-string-fn) instance
+      (let ((info (funcall info-string-fn)))
+        (format st "FUNCTIONALITY-MODULE ~S~A~A" name
                 (if (plusp (length info)) " " "")
                 info)))))
 
-(defun make-structural-constraint (&rest args)
-  (apply (alexandria:curry #'make-instance 'object/structural-constraint) args))
+(defun make-functionality-module (&rest args)
+  (apply (alexandria:curry #'make-instance 'functionality-module) args))
 
-(defun copy-structural-constraint (constraint)
-  (make-structural-constraint
-   :name (structural-constraint/name constraint)
-   :info-string-getter (structural-constraint/info-string-getter constraint)
+(defun copy-functionality-module (module)
+  (make-functionality-module
+   :name (functionality-module/name module)
+   :info-string-fn (functionality-module/info-string-function module)
    :constraint-node-test-fn
-   (structural-constraint/node-test-function constraint)
+   (functionality-module/node-test-function module)
    :constraint-connection-test-fn
-   (structural-constraint/connection-test-function constraint)
+   (functionality-module/connection-test-function module)
    :event-handler-fn-getter
-   (structural-constraint/event-handler-function-getter constraint)
+   (functionality-module/event-handler-function-getter module)
    :init-args-getter
-   (structural-constraint/init-key-arguments-getter constraint)
+   (functionality-module/init-key-arguments-getter module)
    :properties-constr-fn-getter
-   (structural-constraint/properties-constructor-function-getter constraint)))
+   (functionality-module/properties-constructor-function-getter module)))
 
 
 
@@ -75,34 +75,34 @@
               (apply fn args))
             nil))))
 
-;;; *** info string functions package  ***
+;;; *** functionality info string function package ***
 
-(defparameter *info-string-function-getter-containers* nil)
+(defparameter *functionality-info-string-function-packages* nil)
 
-(defclass object/info-string-function-getter-container ()
-  ((name :accessor info-string-function-getter-container/name
+(defclass object/functionality-info-string-function-package ()
+  ((name :accessor functionality-info-string-function-package/name
          :initarg :name
          :initform nil)
    (info-string-fn-getter
-    :accessor info-string-function-getter-container/info-string-function-getter
+    :accessor functionality-info-string-function-package/info-string-function-getter
     :initarg :info-string-fn-getter
     :initform nil)))
 
-(defmethod print-object ((instance object/info-string-function-getter-container) st)
+(defmethod print-object ((instance object/functionality-info-string-function-package) st)
   (print-unreadable-object (instance st)
     (with-slots (name) instance
       (format st "INFO-STRING-GETTER-CONTAINER ~S" name))))
 
-(defun make-info-string-function-getter-container (&rest args)
+(defun make-functionality-info-string-function-package (&rest args)
   (apply (alexandria:curry #'make-instance
-                           'object/info-string-function-getter-container)
+                           'object/functionality-info-string-function-package)
          args))
 
-(defun copy-info-string-function-getter-container (info-container)
-  (make-info-string-function-getter-container
-   :name (info-string-function-getter-container/name info-container)
+(defun copy-functionality-info-string-function-package (info-package)
+  (make-functionality-info-string-function-package
+   :name (functionality-info-string-function-package/name info-package)
    :info-string-fn-getter
-   (info-string-function-getter-container/info-string-function-getter info-container)))
+   (functionality-info-string-function-package/info-string-function-getter info-package)))
 
 
 
@@ -120,15 +120,15 @@
 ;;; *** miscellaneous ***
 
 (defmacro ~object-init-args-handling-let ((object-kind args) &body body)
-  (alexandria:with-gensyms (info-string-fn-getter-containers
+  (alexandria:with-gensyms (funct-info-string-fn-packages
                             custom-info-string-fn-first
-                            structural-constraints)
-    `(let* ((,info-string-fn-getter-containers
+                            functionality-modules)
+    `(let* ((,funct-info-string-fn-packages
              (getf ,args :info-string-fn-getter-containers
-                   *info-string-function-getter-containers*))
+                   *functionality-info-string-function-packages*))
             (,custom-info-string-fn-first (getf ,args :custom-info-string-fn-first))
-            (,structural-constraints
-             (getf ,args :structural-constraints *structural-constraints*))
+            (,functionality-modules
+             (getf ,args :structural-constraints *functionality-modules*))
             (,args (alexandria:delete-from-plist ,args
                                                  :info-string-fn-getter-containers
                                                  :custom-info-string-fn-first
@@ -138,30 +138,30 @@
              (adjoin-properties
               (nconc (alexandria:ensure-list (getf ,args :properties))
                      (mapcar
-                      #'(lambda (constraint)
+                      #'(lambda (module)
                           (apply
                            (let ((fn (funcall
-                                      (structural-constraint/properties-constructor-function-getter
-                                       constraint) ,object-kind)))
+                                      (functionality-module/properties-constructor-function-getter
+                                       module) ,object-kind)))
                              (if fn fn (constantly nil)))
                            (iterate:iter
-                            (with keys = (funcall
-                                          (structural-constraint/init-key-arguments-getter
-                                           constraint) ,object-kind))
-                            (for tail initially ,args then (cddr tail))
-                            (while (cddr tail))
-                            (when (member (caddr tail) keys)
-                              (nconcing (list (caddr tail) (cadddr tail)))
-                              (setf (cddr tail) (cddddr tail))))))
-                      ,structural-constraints))))
+                             (with keys = (funcall
+                                           (functionality-module/init-key-arguments-getter
+                                            module) ,object-kind))
+                             (for tail initially ,args then (cddr tail))
+                             (while (cddr tail))
+                             (when (member (caddr tail) keys)
+                               (nconcing (list (caddr tail) (cadddr tail)))
+                               (setf (cddr tail) (cddddr tail))))))
+                      ,functionality-modules))))
             (,args (cddr ,args))
             (event-handler-function
              (make-conjoint-event-handler-function
-              (nconc (mapcar #'(lambda (constraint)
+              (nconc (mapcar #'(lambda (module)
                                  (funcall
-                                  (structural-constraint/event-handler-function-getter
-                                   constraint) ,object-kind))
-                             ,structural-constraints)
+                                  (functionality-module/event-handler-function-getter
+                                   module) ,object-kind))
+                             ,functionality-modules)
                      (list (getf ,args :event-handler-fn)))))
             (info-string-function
              (make-conjoint-info-string-function
@@ -170,9 +170,9 @@
                      (mapcar
                       #'(lambda (container)
                           (funcall
-                           (info-string-function-getter-container/info-string-function-getter
+                           (functionality-info-string-function-package/info-string-function-getter
                             container) ,object-kind))
-                      ,info-string-fn-getter-containers)))
+                      ,funct-info-string-fn-packages)))
                 (if ,custom-info-string-fn-first
                     (cons custom-fn fn-list)
                     (nconc fn-list (list custom-fn)))))))

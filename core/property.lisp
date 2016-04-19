@@ -1,4 +1,4 @@
-;;;; object.lisp
+;;;; property.lisp
 
 (in-package #:cl-gp)
 
@@ -29,9 +29,12 @@
    (value-setting-fn :accessor property/value-setting-function
                      :initarg :value-setting-fn
                      :initform +property/writable+)
-   (on-value-setting-event-fn-alist :accessor property/on-value-setting-event-functions-alist
-                                    :initarg :on-value-setting-event-fn-alist
-                                    :initform nil)))
+   (on-value-setting-event-fn-alist :initform nil)))
+
+(defmethod initialize-instance :after ((instance object/property) &key)
+  (with-slots (value on-value-setting-event-fn-alist) instance
+    (dolist (element on-value-setting-event-fn-alist)
+      (funcall (cdr element) value))))
 
 (defun object/property? (object)
   (typep object 'object/property))
@@ -47,34 +50,64 @@
                            :key key :value value) args))
 
 (defun copy-property (property)
-  (make-property (property/key property)
-                 (funcall (property/value-copy-function property)
-                          (property/value property))
-                 :value-copy-fn (property/value-copy-function property)
-                 :value-setting-fn (property/value-setting-function property)
-                 :on-value-setting-event-fn-alist
-                 (copy-list (property/on-value-setting-event-functions-alist property))))
+  (let ((new-property
+         (make-property (property/key property)
+                        (funcall (property/value-copy-function property)
+                                 (property/value property))
+                        :value-copy-fn (property/value-copy-function property)
+                        :value-setting-fn (property/value-setting-function property))))
+    (setf (slot-value new-property 'on-value-setting-event-fn-alist)
+       (copy-alist (slot-value property
+                               'on-value-setting-event-fn-alist)))
+    new-property))
 
 (defun (setf property/value) (new-value property)
   (with-slots (value value-setting-fn on-value-setting-event-fn-alist) property
     (setf value (funcall value-setting-fn value new-value))
-    (dolist (element on-value-setting-event-fn-alist)
-      (funcall (cdr element) value))
+    (dolist (entry on-value-setting-event-fn-alist)
+      (funcall (cdr entry) value))
     value))
 
 
 
-(defun make-fn-alist-entry (setter unique-id func)
-  (cons (cons setter unique-id) func))
+(defun property/register-value-setting-event-function! (property fn-owner fn-id func argument)
+  (with-slots (on-value-setting-event-fn-alist) property
+    (setf on-value-setting-event-fn-alist
+       (acons (cons fn-owner fn-id) func on-value-setting-event-fn-alist))
+    (funcall func argument)
+    t))
 
-(defun fn-alist-entry/setter (entry)
-  (caar entry))
+(defun property/unregister-value-setting-event-function! (property fn-owner fn-id)
+  (with-slots (on-value-setting-event-fn-alist) property
+    (setf on-value-setting-event-fn-alist
+       (delete-if #'(lambda (entry)
+                      (and (tree-equal (caar entry) fn-owner)
+                         (tree-equal (cdar entry) fn-id)))
+                  on-value-setting-event-fn-alist))
+    t))
 
-(defun fn-alist-entry/unique-id (entry)
-  (cdar entry))
+(defun property/unregister-value-setting-event-functions! (property fn-owner)
+  (with-slots (on-value-setting-event-fn-alist) property
+    (setf on-value-setting-event-fn-alist
+       (delete-if #'(lambda (entry)
+                      (tree-equal (caar entry) fn-owner))
+                  on-value-setting-event-fn-alist))
+    t))
 
-(defun fn-alist-entry/func (entry)
-  (cdr entry))
+(defun property/call-value-setting-event-function (property fn-owner fn-id argument)
+  (with-slots (on-value-setting-event-fn-alist) property
+    (dolist (entry on-value-setting-event-fn-alist)
+      (if (and (tree-equal (caar entry) fn-owner)
+             (tree-equal (cdar entry) fn-id))
+          (funcall (cdr entry) argument)))
+    t))
+
+(defun property/call-value-setting-event-functions (property fn-owner argument)
+  (with-slots (on-value-setting-event-fn-alist) property
+    (dolist (entry on-value-setting-event-fn-alist)
+      (if (tree-equal (caar entry) fn-owner)
+          (funcall (cdr entry) argument)))
+    t))
 
 ;;; *** properties ***
 
@@ -172,89 +205,3 @@
                                      (alexandria:ensure-list object)))
                              properties-list))
            :from-end t)))
-
-;;; *** abstract object ***
-
-(defparameter *purpose-test* #'eql)
-
-(defun purpose-equal (purpose1 purpose2)
-  (funcall *purpose-test* purpose1 purpose2))
-
-(defconstant +purpose/regular+ 'regular)
-
-
-
-(defparameter *kind-test* #'eql)
-
-(defun kind-equal (kind1 kind2)
-  (funcall *kind-test* kind1 kind2))
-
-(defgeneric object/kind (object)
-  (:documentation "Get object class identifier value"))
-
-
-
-(defclass abstract-object ()
-  ((purpose :reader object/purpose
-            :initarg :purpose
-            :initform +purpose/regular+)
-   (properties :accessor object/properties
-               :initarg :properties
-               :initform nil)
-   (event-handler-fn :accessor object/event-handler-function
-                     :initarg :event-handler-fn
-                     :initform (constantly nil))
-   (info-string-fn :accessor object/info-string-function
-                   :initarg :info-string-fn
-                   :initform (constantly ""))))
-
-(defconstant +kind/abstract+ 'object)
-
-(defmethod object/kind ((object abstract-object))
-  +kind/abstract+)
-
-(defgeneric object/description-string (object &key no-object-kind)
-  (:documentation "Generate description string for printing purposes"))
-
-(defmacro define-description-string-method (object-class &body body)
-  `(defmethod object/description-string ((object ,object-class) &key no-object-kind)
-     (let ((descr (progn ,@body)))
-       (if no-object-kind
-           descr
-           (format nil "~S~A~A" (object/kind object)
-                   (if (plusp (length descr)) " " "")
-                   descr)))))
-
-(defmethod print-object ((instance abstract-object) st)
-  (print-unreadable-object (instance st)
-    (let ((*print-circle* nil))
-      (format st (object/description-string instance)))))
-
-
-
-(defun make-object (object-class &optional args)
-  (apply (alexandria:curry #'make-instance object-class) args))
-
-(defun copy-object (object &optional args)
-  (apply (alexandria:curry #'make-instance (type-of object))
-         (nconc (if (null (getf args :purpose))
-                    (list :purpose (object/purpose object)))
-                (if (null (getf args :properties))
-                    (list :properties (copy-properties (object/properties object))))
-                (if (null (getf args :event-handler-fn))
-                    (list :event-handler-fn (object/event-handler-function object)))
-                (if (null (getf args :info-string-fn))
-                    (list :info-string-fn (object/info-string-function object)))
-                args)))
-
-(defun object/get-property-value (object key &optional default-value)
-  (properties/get-property-value (object/properties object) key default-value))
-
-(defun object/set-property-value! (object key new-value)
-  (if (object/properties object)
-      (properties/set-property-value! (object/properties object) key new-value)
-      (progn
-        (setf (object/properties object)
-           (make-properties-container
-            (list (make-property key new-value))))
-        new-value)))

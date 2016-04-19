@@ -640,15 +640,15 @@
   `(let ((constraint-node-test-fn
           (make-conjoint-constraint-test-function
            (cons (getf ,args :constraint-node-test-fn)
-                 (mapcar #'structural-constraint/node-test-function
-                         (getf ,args :structural-constraints
-                               *structural-constraints*)))))
+                 (mapcar #'functionality-module/node-test-function
+                         (getf ,args :functionality-modules
+                               *functionality-modules*)))))
          (constraint-connection-test-fn
           (make-conjoint-constraint-test-function
            (cons (getf ,args :constraint-connection-test-fn)
-                 (mapcar #'structural-constraint/connection-test-function
-                         (getf ,args :structural-constraints
-                               *structural-constraints*))))))
+                 (mapcar #'functionality-module/connection-test-function
+                         (getf ,args :functionality-modules
+                               *functionality-modules*))))))
      (~object-init-args-handling-let (+kind/graph+ ,args)
        (make-object 'object/graph
                     (nconc (list :constraint-node-test-fn constraint-node-test-fn

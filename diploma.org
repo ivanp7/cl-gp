@@ -2,7 +2,48 @@
 
 * Диплом
 ** Тема
-Программная реализация и исследование средств автоматизации проектирования алгоритмов
+Разработка, программная реализация и исследование средств автоматизации проектирования алгоритмов
+** Заявка на конференцию
+Подтверждение формы
+
+Спасибо. Отправлены следующие сведения:
+
+IdFakult: 2
+Tel: +375 33 3089325 МТС
+Adress:
+email: ivanp7@mail.ru
+IdSek: 4
+NazvanieDoclada: Разработка, программная реализация и исследование средств автоматизации проектирования алгоритмов
+familia: Подмазов
+VuzDrugoi:
+VuzDrugoi2:
+imya: Иван
+Stepen2:
+FatherName: Валерьевич
+FatherName2:
+Stepen: кандидат
+VidNauk: технических наук
+Status: студ.
+familia2:
+VidNauk2:
+NumberKurs: 5
+NumberKurs2:
+NauchName: Геннадий
+NauchName2:
+FormaObuch: очная
+FormaObuch2: очная
+NauchFam: Афанасьев
+VuzRukovod:
+NauchFam2:
+zvan2:
+VuzRukovod2:
+B1: Отправить
+imya2:
+Status2:
+Prim:
+NauchFather: Константинович
+zvan: доцент
+NauchFather2:
 ** Оглавление
 *** Введение
 Описание проблемы автоматической генерации программ

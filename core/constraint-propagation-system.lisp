@@ -7,6 +7,12 @@
 (defclass cps/abstract-constraint ()
   ())
 
+(defgeneric cps-constraint/establish (this &allow-other-keys)
+  (:documentation ""))
+
+(defgeneric cps-constraint/abolish (this)
+  (:documentation ""))
+
 (defun make-cps-constraint (cps-constraint-class &optional args)
   (apply (alexandria:curry #'make-instance cps-constraint-class) args))
 
@@ -34,6 +40,9 @@
 
 (defun make-cps-connector (&optional (constraint-test-fn *constraint-test*))
   (make-instance 'cps/connector :constraint-test-fn constraint-test-fn))
+
+(defun copy-cps-connector (connector)
+  (make-cps-connector (cps-connector/constraint-test-function connector)))
 
 (defun cps-connector/has-value? (connector)
   (not (null (slot-value connector 'informant))))
@@ -71,7 +80,7 @@
 (defun cps-connector/disconnect! (connector old-constraint)
   (with-slots (constraints constraint-test-fn) connector
     (setf constraints (delete old-constraint constraints
-                              :test constraint-test-fn :count 1))
+                           :test constraint-test-fn :count 1))
     (when (cps-connector/has-value? connector)
       (cps-constraint/inform-about-no-value old-constraint))
     t))

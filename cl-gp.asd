@@ -7,67 +7,47 @@
   :depends-on (#:alexandria
                #:cl-graph
                #:iterate)
-  :components (;; abstract graph framework
-               (:file "package")
-               (:file "object" :depends-on ("package"))
-               (:file "structural-constraints" :depends-on ("package"))
-               (:file "node" :depends-on ("object" "structural-constraints"))
-               (:file "connection" :depends-on ("object" "node" "structural-constraints"))
-               (:file "constraint-propagation-system" :depends-on ("package"))
-               (:file "graph" :depends-on ("object" "node" "connection"
-                                                    "structural-constraints"))
-               (:file "reference" :depends-on ("graph"))
+  :components
+  (;; library core
+   (:file "package")
+   (:file "core/property" :depends-on ("package"))
+   (:file "core/object" :depends-on ("core/property"))
+   (:file "core/functionality-module" :depends-on ("package"))
+   (:file "core/node" :depends-on ("core/object"
+                                   "core/functionality-module"))
+   (:file "core/connection" :depends-on ("core/object"
+                                         "core/node"
+                                         "core/functionality-module"))
+   (:file "core/constraint-propagation-system" :depends-on ("package"))
+   (:file "core/graph" :depends-on ("core/object"
+                                    "core/node"
+                                    "core/connection"
+                                    "core/functionality-module"))
+   (:file "core/core" :depends-on ("core/graph"
+                                   "core/constraint-propagation-system"))
 
+   ;; functionality modules
+   (:file "functionality-modules/reference/reference"
+          :depends-on ("core/core"))
 
-               ;; generic constraints:
-               ;;(:file "strong-typing-constraint"
-               ;;       :depends-on ("graph" "reference" "constraint-propagation-system"))
+   (:file "functionality-modules/name-property/name"
+          :depends-on ("core/core"
+                       "functionality-modules/reference/reference"))
+   #|
+   (:file "functionality-modules/strong-typing-constraint/type-entity"
+   :depends-on ("package"))
+   (:file "functionality-modules/strong-typing-constraint/constraint"
+   :depends-on ("core/core"
+   "functionality-modules/reference/reference"
+   "functionality-modules/strong-typing-constraint/type-entity"))
+   |#
+   ;; applications
+   (:file "applications/application" :depends-on ("core/core"))
 
+   (:file "applications/programs/program"
+          :depends-on ("applications/application"
+                       "functionality-modules/reference/reference"
+                       "functionality-modules/name-property/name"))
 
-               ;; specific methods of use:
-               ;; 1) programs
-               (:file "programs" :depends-on ("graph" "reference"))
-
-
-               ;; abstraction over methods of use
-               ;;(:file "use" :depends-on ("programs"))
-
-
-               ;; abstract genetic programming algorithm
-               ;;(:file "fitness" :depends-on ("use"))
-               ;;(:file "operators" :depends-on ("use"))
-               ;;(:file "cl-gp" :depends-on ("graph" "fitness" "operators"))
-               )
-  #+nil (;; abstract graph framework
-       (:file "package")
-       (:file "object" :depends-on ("package"))
-       (:file "structural-constraints" :depends-on ("package"))
-       (:file "node" :depends-on ("object" "structural-constraints"))
-       (:file "connection" :depends-on ("object" "node" "structural-constraints"))
-       (:file "constraint-propagation-system" :depends-on ("package"))
-       (:file "graph" :depends-on ("object" "node" "connection"
-                                            "structural-constraints"))
-       (:file "reference" :depends-on ("graph"))
-
-
-       ;; generic constraints:
-       (:file "disjoint-input-arrows-constraint" :depends-on ("graph"))
-       (:file "strong-typing-constraint"
-              :depends-on ("graph" "reference" "constraint-propagation-system"))
-
-
-       ;; specific methods of use:
-       ;; 1) programs
-       (:file "programs" :depends-on ("graph"
-                                      "reference"
-                                      "disjoint-input-arrows-constraint"))
-
-
-       ;; abstraction over methods of use
-       (:file "use" :depends-on ("programs"))
-
-
-       ;; abstract genetic programming algorithm
-       (:file "fitness" :depends-on ("use"))
-       (:file "operators" :depends-on ("use"))
-       (:file "cl-gp" :depends-on ("graph" "fitness" "operators"))))
+   ;; algorithm
+   (:file "genetic-programming/algorithm" :depends-on ("package"))))
