@@ -94,18 +94,18 @@
   (purpose-equal (object/purpose connection) +purpose/regular+))
 
 (define-description-string-method object/connection
-    (let ((*print-circle* nil))
-      (with-slots (source target arrow purpose properties info-string-fn) object
-        (let ((info (funcall info-string-fn object)))
-          (concatenate 'string
-                       (format nil "~S [~S]~A[~S]"
-                               purpose
-                               source
-                               (funcall (connection/arrow->string object)
-                                        arrow purpose)
-                               target)
-                       (if (plusp (length info)) " " "")
-                       info)))))
+  (let ((*print-circle* nil))
+    (with-slots (source target arrow purpose properties info-string-fn) object
+      (let ((info (funcall info-string-fn object)))
+        (concatenate 'string
+                     (format nil "~S [~S]~A[~S]"
+                             purpose
+                             source
+                             (funcall (connection/arrow->string object)
+                                      arrow purpose)
+                             target)
+                     (if (plusp (length info)) " " "")
+                     info)))))
 
 
 
@@ -120,14 +120,17 @@
                         (alexandria:delete-from-plist
                          args :source :target :properties :event-handler-fn :info-string-fn)))))
 
-(defun copy-connection (connection &rest args)
-  (copy-object connection
-               (nconc (list :source (connection/source-label connection)
-                            :target (connection/target-label connection)
-                            :arrow (let ((arrow (connection/arrow connection)))
-                                     (if arrow (copy-arrow arrow)))
-                            :arrow->string-fn (connection/arrow->string connection))
-                      args)))
+(defun copy-connection (connection &optional args)
+  (copy-abstract-object connection
+                        (nconc (list :source (connection/source-label connection)
+                                     :target (connection/target-label connection)
+                                     :arrow (let ((arrow (connection/arrow connection)))
+                                              (if arrow (copy-arrow arrow)))
+                                     :arrow->string-fn (connection/arrow->string connection))
+                               args)))
+
+(defmethod copy-object ((object object/connection) &rest args)
+  (copy-connection object args))
 
 (defun connection-equal (conn1 conn2)
   (and (purpose-equal (object/purpose conn1)

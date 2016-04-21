@@ -7,7 +7,7 @@
 (defclass cps/abstract-constraint ()
   ())
 
-(defgeneric cps-constraint/establish (this &allow-other-keys)
+(defgeneric cps-constraint/establish (this &key &allow-other-keys)
   (:documentation ""))
 
 (defgeneric cps-constraint/abolish (this)
@@ -80,7 +80,7 @@
 (defun cps-connector/disconnect! (connector old-constraint)
   (with-slots (constraints constraint-test-fn) connector
     (setf constraints (delete old-constraint constraints
-                           :test constraint-test-fn :count 1))
+                              :test constraint-test-fn :count 1))
     (when (cps-connector/has-value? connector)
       (cps-constraint/inform-about-no-value old-constraint))
     t))

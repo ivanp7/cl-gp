@@ -66,7 +66,7 @@
     (funcall (object/event-handler-function object) object :on-initialization)
     object))
 
-(defun copy-object (object &optional args)
+(defun copy-abstract-object (object &optional args)
   (apply (alexandria:curry #'make-instance (type-of object))
          (nconc (if (null (getf args :purpose))
                     (list :purpose (object/purpose object)))
@@ -77,6 +77,12 @@
                 (if (null (getf args :info-string-fn))
                     (list :info-string-fn (object/info-string-function object)))
                 args)))
+
+(defgeneric copy-object (object &rest args)
+  (:documentation "Make a deep copy of an object"))
+
+(defmethod copy-object ((object abstract-object) &rest args)
+  (copy-abstract-object object args))
 
 (defun object/get-property-value (object key &optional default-value)
   (properties/get-property-value (object/properties object) key default-value))

@@ -152,8 +152,8 @@
 
 (defun graph/nodes (graph labels-list)
   (let ((nodes (delete nil (mapcar #'(lambda (label)
-                                     (graph/node graph label))
-                                 labels-list))))
+                                       (graph/node graph label))
+                                   labels-list))))
     (values nodes
             (remove-duplicates (mapcar #'object/purpose nodes)
                                :test *purpose-test*))))
@@ -666,18 +666,21 @@
     (graph/connect-set! graph connections)
     graph))
 
-(defun graph/copy-graph (graph &rest args)
+(defun graph/copy-graph (graph &optional args)
   (let* ((nodes (mapcar #'copy-node (graph/all-nodes graph)))
          (connections (mapcar #'copy-connection (graph/all-connections graph)))
-         (new-graph (copy-object graph
-                                 (nconc (list :constraint-node-test-fn
-                                              (graph/constraint-node-test-function graph)
-                                              :constraint-connection-test-fn
-                                              (graph/constraint-connection-test-function graph))
-                                        args))))
+         (new-graph (copy-abstract-object
+                     graph (nconc (list :constraint-node-test-fn
+                                        (graph/constraint-node-test-function graph)
+                                        :constraint-connection-test-fn
+                                        (graph/constraint-connection-test-function graph))
+                                  args))))
     (graph/add-nodes! new-graph nodes)
     (graph/connect-set! new-graph connections)
     new-graph))
+
+(defmethod copy-object ((object object/graph) &rest args)
+  (graph/copy-graph object args))
 
 (defun graph/copy-subgraph (graph labels-list &rest args)
   (let* ((nodes (mapcar #'copy-node (graph/nodes graph labels-list)))

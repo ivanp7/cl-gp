@@ -47,7 +47,10 @@
                         (alexandria:delete-from-plist
                          args :label :properties :event-handler-fn :info-string-fn)))))
 
-(defun copy-node (node &rest args)
-  (copy-object node (nconc (list :label (node/label node)
-                                 :groups (copy-list (node/groups node)))
-                           args)))
+(defun copy-node (node &optional args)
+  (copy-abstract-object node (nconc (list :label (node/label node)
+                                          :groups (copy-list (node/groups node)))
+                                    args)))
+
+(defmethod copy-object ((object object/node) &rest args)
+  (copy-node object args))

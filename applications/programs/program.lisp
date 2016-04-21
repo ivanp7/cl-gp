@@ -8,22 +8,22 @@
 
 (defparameter *tag-test* #'eql)
 
-(defclass data-field-selector (abstract-selector)
+(defclass data-selector (abstract-selector)
   ((tags :accessor selector/tags
          :initarg :tags
          :initform nil)))
 
-(defmethod selector/description-string ((selector data-field-selector))
+(defmethod selector/description-string ((selector data-selector))
   (let ((*print-circle* nil))
     (format nil "~:S" (selector/tags selector))))
 
-(defun make-data-field-selector (tags-list)
-  (make-instance 'data-field-selector :tags (copy-list tags-list)))
+(defun make-data-selector (tags-list)
+  (make-instance 'data-selector :tags (copy-list tags-list)))
 
-(defmethod copy-selector ((selector data-field-selector))
-  (make-data-field-selector (selector/tags selector)))
+(defmethod copy-selector ((selector data-selector))
+  (make-data-selector (selector/tags selector)))
 
-(defmethod selector-equal ((selector1 data-field-selector) (selector2 data-field-selector))
+(defmethod selector-equal ((selector1 data-selector) (selector2 data-selector))
   (let ((tags1 (selector/tags selector1))
         (tags2 (selector/tags selector2)))
     (and (= (length tags1) (length tags2))
