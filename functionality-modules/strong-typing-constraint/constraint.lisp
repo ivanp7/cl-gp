@@ -53,15 +53,18 @@
                       :initform nil)))
 
 (defmethod cps-constraint/establish ((this cps-constraint/node) &rest args)
-  (let ((input-type (getf args :input-type))
-        (output-type (getf args :output-type)))
-    (setf type-variables-list (funcall type-variables-list-getter input-type output-type)))
-  (dolist (typevar type-variables-list)
-    (cps-connector/connect! (slot-value typevar 'cps-connector) this)))
+  (with-slots (type-variables-list type-variables-list-getter) this
+    (let ((input-type (getf args :input-type))
+          (output-type (getf args :output-type)))
+      (setf type-variables-list (funcall type-variables-list-getter input-type output-type)))
+    (dolist (typevar type-variables-list)
+      (cps-connector/connect! (slot-value typevar 'cps-connector) this))))
 
 (defmethod cps-constraint/abolish ((this cps-constraint/node))
-  (dolist (typevar type-variables-list)
-    (cps-connector/disconnect! (slot-value typevar 'cps-connector) this)))
+  (with-slots (type-variables-list) this
+    (dolist (typevar type-variables-list)
+      (cps-connector/disconnect! (slot-value typevar 'cps-connector) this))
+    (setf type-variables-list nil)))
 
 (defmethod initialize-instance :after ((this cps-constraint/node))
   (with-slots (type-variables-list-getter cps-constraint-fn) this
@@ -87,18 +90,21 @@
 
 
 
-(defun make-node-type-variable-constraint (type-variables-list-getter
-                                           &optional cps-constraint-fn)
+(defun make-node-internal-type-variable-constraint (type-variables-list-getter
+                                                    &optional cps-constraint-fn)
   (make-instance 'cps-constraint/node
                  :type-variables-list-getter type-variables-list-getter
                  :cps-constraint-fn cps-constraint-fn))
 
-(defmethod copy-cps-constraint ((cps-constraint cps-constraint/node))
-  (with-slots (type-variables-list-getter cps-constraint-fn) cps-constraint
-    (make-node-type-variable-constraint type-variables-list-getter
-                                        cps-constraint-fn)))
+(defun copy-node-internal-type-variable-constraint (constraint)
+  (with-slots (type-variables-list-getter cps-constraint-fn) constraint
+    (make-node-internal-type-variable-constraint
+     type-variables-list-getter cps-constraint-fn)))
 
-;;; *** generic ***
+(defmethod copy-cps-constraint ((cps-constraint cps-constraint/node))
+  (copy-node-internal-type-variable-constraint cps-constraint))
+
+;;; *** object property readers ***
 
 (defun object/input-type (object)
   (object/get-property-value object :input-type +bottom-type+))
@@ -112,14 +118,15 @@
     ((direction/output? direction) (object/output-type object))
     (t (error "OBJECT/TYPE -- incorrect direction ~S is supplied" direction))))
 
-(defun object/internal-type-variable-constraints-list (object)
-  (object/get-property-value object :internal-type-variable-constraints-list))
+(defun object/internal-type-variable-constraints (object)
+  (object/get-property-value object :internal-type-variable-constraints))
 
 ;;; ******************
 ;;; *** constraint ***
 ;;; ******************
 
 (defparameter *strong-typing-enabled* t)
+(defparameter *strong-typing-allow-data-loss* nil)
 
 (defparameter *strong-typing-constraint*
   (make-functionality-module
@@ -128,32 +135,74 @@
    #'(lambda (source-node target-node connection graph)
        (declare (ignore graph))
        (or (not *strong-typing-enabled*)
-          (let ((source-entity (type/nested-subtype-selection
+          (let ((source-entity (type/recursive-component-type-selection
                                 (object/output-type source-node)
                                 (arrow/source-selector (connection/arrow connection))))
-                (target-entity (type/nested-subtype-selection
+                (target-entity (type/recursive-component-type-selection
                                 (object/input-type target-node)
                                 (arrow/target-selector (connection/arrow connection)))))
-            (type-entity/reducible? source-entity target-entity))))
+            (let ((result (type-entity/reducible? source-entity target-entity)))
+              (cond
+                ((not result) nil)
+                ((eql result :loss) *strong-typing-allow-data-loss*)
+                ((eql result t) t)
+                (t t))))))
    :event-handler-fn-getter
    #'(lambda (kind)
        (alexandria:switch (kind :test #'kind-equal)
          (+kind/node+ #'(lambda (node event &rest args)
-                          (case event
-                            (:on-initialization
-                             (let ((input-type (object/input-type node))
-                                   (output-type (object/output-type node)))
-                               (dolist (constr (object/internal-type-variable-constraints-list
-                                                node))
-                                 (cps-constraint/establish constr input-type output-type))))
-                            (...))))
-         (+kind/connection+ #'(lambda (connection event &rest args) ...))
-         (+kind/graph+ #'(lambda (graph event &rest args) ...))
+                          (let ((connection (getf args :connection))
+                                (graph (getf args :graph)))
+                            (case event
+                              (:on-initialization
+                               (let ((input-type (object/input-type node))
+                                     (output-type (object/output-type node)))
+                                 (dolist (constr (object/internal-type-variable-constraints
+                                                  node))
+                                   (cps-constraint/establish constr input-type output-type))))
+                              (:on-addition-to-graph
+                               (when (node/reference-master-source? node)
+                                 (let ((node-input-type-property
+                                        (properties/get-property
+                                         (object/properties node) :input-type))
+                                       (node-output-type-property
+                                        (properties/get-property
+                                         (object/properties node) :output-type))
+                                       (graph-input-type-property
+                                        (properties/get-property
+                                         (object/properties graph) :input-type))
+                                       (graph-output-type-property
+                                        (properties/get-property
+                                         (object/properties graph) :output-type)))
+                                   (property/register-value-setting-event-function!
+                                    node-input-type-property 'strong-typing nil
+                                    #'(lambda (value)
+                                        (setf (property/value graph-output-type-property)
+                                           value))
+                                    (property/value node-input-type-property))
+                                   (property/register-value-setting-event-function!
+                                    node-output-type-property 'strong-typing nil
+                                    #'(lambda (value)
+                                        (setf (property/value graph-input-type-property)
+                                           value))
+                                    (property/value node-output-type-property)))))
+                              (:on-deletion-from-graph
+                               #|FIIIIIIX|# nil)
+                              (:on-setting-of-connection
+                               #|FIIIIIIX|# nil)
+                              (:on-loss-of-connection
+                               #|FIIIIIIX|# nil)))))
+         (+kind/connection+ #'(lambda (connection event &rest args)
+                                (case event
+                                  (:on-addition-to-graph
+                                   #|FIIIIIIX|# nil)
+                                  (:on-deletion-from-graph
+                                   #|FIIIIIIX|# nil))))
          (t (constantly nil))))
    :init-args-getter
    #'(lambda (kind)
        (if (kind-equal kind +kind/node+)
-           '(:input-type :output-type :internal-type-variable-constraints-list)))
+           '(:input-type :output-type :internal-type-variable-constraints)))
    :properties-constr-fn-getter
    #'(lambda (kind)
        (alexandria:switch (kind :test #'kind-equal)
@@ -165,7 +214,7 @@
                                     :value-copy-fn #'copy-type-entity)
                      (make-property :output-type output-type
                                     :value-copy-fn #'copy-type-entity)
-                     (make-property :internal-type-variable-constraints-list
+                     (make-property :internal-type-variable-constraints
                                     internal-type-variable-constraints-list
                                     :value-copy-fn #'(lambda (constraints)
                                                        (mapcar #'copy-cps-constraint
@@ -177,7 +226,7 @@
                                     :value-copy-fn (constantly +bottom-type+))
                      (make-property :output-type +bottom-type+
                                     :value-copy-fn (constantly +bottom-type+))
-                     (make-property :internal-type-variable-constraints-list
+                     (make-property :internal-type-variable-constraints
                                     nil
                                     :value-copy-fn (constantly nil))))))
          (+kind/graph+

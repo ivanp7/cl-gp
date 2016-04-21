@@ -14,28 +14,59 @@
 (setf *functionality-info-string-function-packages*
    (list *name-info-string-function-package*))
 
+(defparameter *boolean-type* (make-primitive-type 'boolean))
+(defparameter *integer-type* (make-primitive-type 'integer))
+(defparameter *number-type*
+  (make-primitive-type 'number :reducibility-test-fn
+                       #'(lambda (source target)
+                           (declare (ignore target))
+                           (if (type-name-equal )))))
+
 (defparameter *factorial*
   (graph/make-graph
-   (list (make-reference-master-source-node 0 :name 'factorial)
-         (make-node 1 :name 'if)
-         (make-node 2 :name 1)
-         (make-node 3 :name 'zerop)
-         (make-node 4 :name '*)
+   (list (make-reference-master-source-node 0 :name 'factorial
+                                            :input-type (make-type-variable :input)
+                                            :output-type (make-type-variable :output))
+         (make-node 1 :name 'if
+                    :input-type (make-record
+                                 (list (make-field 'condition *boolean-type*)
+                                       (make-field 'consequence (make-type-variable :csq))
+                                       (make-field 'alternative (make-type-variable :alt))))
+                    :output-type (make-type-variable :result)
+                    :internal-type-variable-constraints
+                    (list (make-node-internal-type-variable-constraint
+                           #'(lambda (input-type output-type)
+                               (list (field/type (find-if #'(lambda (field)
+                                                              (eql (field/name field)
+                                                                   'consequence))
+                                                          (record/fields input-type)))
+                                     (field/type (find-if #'(lambda (field)
+                                                              (eql (field/name field)
+                                                                   'alternative))
+                                                          (record/fields input-type)))
+                                     output-type)))))
+         (make-node 2 :name 1 :output-type *integer-type*)
+         (make-node 3 :name 'zerop :input-type *number-type* :output-type *boolean-type*)
+         (make-node 4 :name '*
+                    :input-type (make-record
+                                 (list (make-field 'value1 *number-type*)
+                                       (make-field 'value2 *number-type*)))
+                    :output-type *number-type*)
          (make-reference-target-node 5)
-         (make-node 6 :name '1-))
+         (make-node 6 :name '1- :input-type *number-type* :output-type *number-type*))
    (list (make-reference-connection 0 5)
          (make-connection 1 0 :arrow (make-arrow))
          (make-connection 2 1 :arrow (make-arrow :target-selector
-                                                 (make-data-field-selector '(consequence))))
+                                                 (make-data-selector '(consequence))))
          (make-connection 3 1 :arrow (make-arrow :target-selector
-                                                 (make-data-field-selector '(condition))))
+                                                 (make-data-selector '(condition))))
          (make-connection 0 3 :arrow (make-arrow))
          (make-connection 4 1 :arrow (make-arrow :target-selector
-                                                 (make-data-field-selector '(alternative))))
+                                                 (make-data-selector '(alternative))))
          (make-connection 0 4 :arrow (make-arrow :target-selector
-                                                 (make-data-field-selector '(arg1))))
+                                                 (make-data-selector '(value1))))
          (make-connection 5 4 :arrow (make-arrow :target-selector
-                                                 (make-data-field-selector '(arg2))))
+                                                 (make-data-selector '(value2))))
          (make-connection 6 5 :arrow (make-arrow))
          (make-connection 0 6 :arrow (make-arrow)))))
 

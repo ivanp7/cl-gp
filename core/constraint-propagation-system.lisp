@@ -13,11 +13,8 @@
 (defgeneric cps-constraint/abolish (this)
   (:documentation ""))
 
-(defun make-cps-constraint (cps-constraint-class &optional args)
-  (apply (alexandria:curry #'make-instance cps-constraint-class) args))
-
-(defun copy-cps-constraint (cps-constraint &optional args)
-  (apply (alexandria:curry #'make-instance (type-of cps-constraint)) args))
+(defgeneric copy-cps-constraint (cps-constraint)
+  (:documentation "Copy constraint object"))
 
 (defgeneric cps-constraint/inform-about-value (constraint)
   (:documentation "Inform contraint about a new value on a one of the connectors."))

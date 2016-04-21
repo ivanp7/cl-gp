@@ -2,13 +2,9 @@
 
 (in-package #:cl-gp)
 
-
 ;;; ****************
 ;;; *** entities ***
 ;;; ****************
-
-(defgeneric type-entity/reducible? (source-entity target-entity)
-  (:documentation "Test if source entity can be reduced to target entity"))
 
 (defgeneric copy-type-entity (entity)
   (:documentation "Make deep copy of an entity"))
@@ -25,10 +21,23 @@
 (defgeneric type-entity/unassociate-entity! (entity retractor)
   (:documentation "Forget associated entity of type entity"))
 
+(defgeneric type-entity/reducible? (source-entity target-entity)
+  (:documentation "Test if source entity can be reduced to target entity"))
+
+
+
 (defclass abstract-type-entity ()
-  ((reducibility-test-fn :accessor type-entity/reducibility-test-function
-                         :initarg :reducibility-test-fn
-                         :initform (constantly nil))))
+  ())
+
+(defun copy-abstract-type-entity (entity &optional args)
+  (apply (alexandria:curry #'make-instance (type-of entity))
+         (nconc (if (null (getf args :reducibility-test-fn))
+                    (list :reducibility-test-fn
+                          (type-entity/reducibility-test-function object)))
+                args)))
+
+(defmethod copy-type-entity ((entity abstract-type-entity) &rest args)
+  (copy-abstract-type-entity entity args))
 
 (defmethod type-entity/has-associated-entity? ((entity abstract-type-entity))
   (declare (ignore entity))
@@ -45,103 +54,168 @@
   (declare (ignore entity retractor))
   nil)
 
-;;; *** value as type ***
-;;; *********************
+(defun type-entity/deepest-associated-entity (entity)
+  (let ((assoc-entity (type-entity/associated-entity entity)))
+    (if (eql entity assoc-entity)
+        entity
+        (type-entity/deepest-associated-entity assoc-entity))))
 
-(defclass value-as-type (abstract-type-entity)
-  ((value :accessor value-as-type/value
-          :initarg :value
-          :initform (error "VALUE-AS-TYPE -- :value parameter must be supplied"))))
 
-(defmethod type-entity/associated-specific-entity ((instance value-as-type))
-  instance)
 
-(defun make-value-as-type-object ()
-  )
+(defmacro define-type-reducibility-method (src-entity-class tgt-entity-class &body body)
+  `(defmethod type-entity/reducible? ((source-entity ,src-entity-class)
+                                      (target-entity ,tgt-entity-class))
+     (let ((source-entity (type-entity/deepest-associated-entity source-entity))
+           (target-entity (type-entity/deepest-associated-entity target-entity)))
+       ,@body)))
+
+(defmethod type-entity/reducible? ((source-entity abstract-type-entity)
+                                   (target-entity abstract-type-entity))
+  nil)
+
+
+
+(defgeneric type-entity/component-type (entity component)
+  (:documentation "Extract (select) type of a component of data"))
+
+(declare (type t +bottom-type+))
+
+(defmethod type-entity/component-type ((entity abstract-type-entity) component)
+  +bottom-type+)
+
+(defun type/recursive-component-type-selection (entity selector)
+  (if (null selector)
+      (type-entity/deepest-associated-entity entity)
+      (type/recursive-component-type-selection
+       (type-entity/component-type
+        (type-entity/deepest-associated-entity entity)
+        (first selector))
+       (rest selector))))
 
 ;;; *** abstract type ***
 ;;; *********************
 
-(defgeneric type/subtype (type part)
-  (:documentation "Extract (select) a part subtype of type"))
-
 (defclass abstract-type-kind (abstract-type-entity)
   ())
 
-(declaim (type t +bottom-type+))
-
-(defmethod type/subtype ((type abstract-type) part)
-  +bottom-type+)
-
-(defun type/nested-subtype-selection (type selector)
-  (if (null selector)
-      type
-      (type/nested-subtype-selection (type/subtype type (first selector))
-                                     (rest selector))))
-
 ;;; *** special types ***
+;;; *********************
 
-(defun abstract-special-type (abstract-type-kind)
+(defclass abstract-special-type (abstract-type-kind)
   )
 
 (defclass bottom-type (abstract-special-type)
   ())
 
-(defconstant +bottom-type+ ...)
+(defun type/bottom-type? (entity)
+  (typep entity 'bottom-type))
+
+(alexandria:define-constant +bottom-type+ (make-instance 'bottom-type)
+  :test (constantly t))
 
 (defclass unit-type (abstract-special-type)
   ())
 
-(defconstant +unit-type+ ...)
+(defun type/unit-type? (entity)
+  (typep entity 'unit-type))
+
+(alexandria:define-constant +unit-type+ (make-instance 'unit-type)
+  :test (constantly t))
 
 (defclass top-type (abstract-special-type)
   ())
 
-(defconstant +top-type+ ...)
+(defun type/top-type? (entity)
+  (typep entity 'top-type))
 
-;;; *** primitive type ***
+(alexandria:define-constant +top-type+ (make-instance 'top-type)
+  :test (constantly t))
 
-(defclass object/primitive-type (abstract-type-kind)
-  ())
+;;; *** data types ***
+;;; ******************
 
-(defun make-primitive-type-object (name)
-  )
+(defclass abstract-data-type (abstract-type-kind)
+  ((reducibility-test-fn :accessor type-entity/reducibility-test-function
+                         :initarg :reducibility-test-fn
+                         :initform (constantly nil))))
 
-;;; *** record ***
+(defmethod type-entity/reducible? ((source-entity abstract-special-type)
+                                   (target-entity abstract-special-type))
+  (cond
+    ((and (type/top-type? source-entity)
+        (type/unit-type? target-entity)) :loss)
+    ((and (type/unit-type? source-entity)
+        (type/unit-type? target-entity)) t)
+    ((and (type/top-type? source-entity)
+        (type/top-type? target-entity)) t)))
 
-(defclass object/record (abstract-type-kind)
-  ())
+(defmethod type-entity/reducible? ((source-entity abstract-special-type)
+                                   (target-entity abstract-data-type))
+  (if (type/top-type? source-entity) :loss))
 
-(defun make-record-object ()
-  )
+(defmethod type-entity/reducible? ((source-entity abstract-data-type)
+                                   (target-entity abstract-special-type))
+  (if (type/unit-type? target-entity) :loss))
 
-;;; *** parametric type ***
-
-(defclass object/parametric-type (abstract-type-kind)
-  ((subtype-selection-fn :accessor parametric-type/subtype-selection-function
-                         :initarg :subtype-selection-fn
-                         :initform (constantly +bottom-type+))))
-
-(defun make-parametric-type-object (name parameters)
-  )
+(defmethod type-entity/reducible? ((source-entity abstract-data-type)
+                                   (target-entity abstract-data-type))
+  (flet ((max-result (r1 r2)
+           (cond ((null r1) r2)
+                 ((null r2) r1)
+                 ((eql r1 t) r1)
+                 ((eql r2 t) r2))))
+    (max-result (funcall (type-entity/reducibility-test-function target-entity)
+                         source-entity target-entity :target)
+                (funcall (type-entity/reducibility-test-function source-entity)
+                         source-entity target-entity :source))))
 
 ;;; *** function type ***
 
-(defclass object/function-type (abstract-type-kind)
+(defclass object/function-type (abstract-data-type)
   ())
 
 (defun make-function-type-object ()
   )
 
+;;; *** record (product type) ***
+
+(defclass object/record (abstract-data-type)
+  ())
+
+(defun make-record ()
+  )
+
+;;; *** parametric type ***
+
+(defclass object/parametric-type (abstract-data-type)
+  ((subtype-selection-fn :accessor parametric-type/subtype-selection-function
+                         :initarg :subtype-selection-fn
+                         :initform (constantly +bottom-type+))))
+
+(defun make-parametric-type (name parameters)
+  )
+
+(defun make-primitive-type (name)
+  (make-parametric-type name (make-record nil)))
+
+;; реализовать типы на подмножествах
+;; реализовать параллельные значения на коннекторах в системе ограничений
+
 ;;; *** type class ***
 ;;; ******************
 
-(defclass object/type-class (abstract-type-entity)
-  (()))
+(defclass object/type-class ()
+  ((membership-test-fn :reader type-class/membership-test-function
+                       :initarg :membership-test-fn
+                       :initform (constantly nil))))
 
-(defun make-type-class-object (&optional (reducibility-test-fn (constantly t)))
-  )
+(defun make-type-class (membership-test-fn)
+  (make-instance 'object/type-class :membership-test-fn membership-test-fn))
 
+(alexandria:define-constant +top-type-class+ (make-type-class (constantly t))
+  :test (constantly t))
+
+;;; *** type variable ***
 
 (defclass type-variable (abstract-type-entity)
   ((label :reader type-variable/label
@@ -166,10 +240,14 @@
 
 
 
-(defun make-type-variable (type-class-object)
-  )
+(defun make-type-variable (label &optional (type-class-object +top-type-class+))
+  (make-instance 'type-variable
+                 :label label
+                 :type-class type-class-object))
 
-
+(defmethod copy-type-entity ((entity type-variable))
+  (make-type-variable (type-variable/label entity)
+                      (type-variable/type-class entity)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
