@@ -14,7 +14,10 @@
                             :initform nil)
    (constraint-connection-test-fn :accessor graph/constraint-connection-test-function
                                   :initarg :constraint-connection-test-fn
-                                  :initform nil)))
+                                  :initform nil)
+   (subgraph-properties-copy-fn :accessor graph/subgraph-properties-copy-function
+                                :initarg :subgraph-properties-copy-fn
+                                :initform (constantly nil))))
 
 (defconstant +kind/graph+ 'graph)
 
@@ -152,8 +155,8 @@
 
 (defun graph/nodes (graph labels-list)
   (let ((nodes (delete nil (mapcar #'(lambda (label)
-                                       (graph/node graph label))
-                                   labels-list))))
+                                     (graph/node graph label))
+                                 labels-list))))
     (values nodes
             (remove-duplicates (mapcar #'object/purpose nodes)
                                :test *purpose-test*))))
@@ -670,10 +673,15 @@
   (let* ((nodes (mapcar #'copy-node (graph/all-nodes graph)))
          (connections (mapcar #'copy-connection (graph/all-connections graph)))
          (new-graph (copy-abstract-object
-                     graph (nconc (list :constraint-node-test-fn
-                                        (graph/constraint-node-test-function graph)
-                                        :constraint-connection-test-fn
-                                        (graph/constraint-connection-test-function graph))
+                     graph (nconc (if (null (getf args :constraint-node-test-fn))
+                                      (list :constraint-node-test-fn
+                                            (graph/constraint-node-test-function graph)))
+                                  (if (null (getf args :constraint-connection-test-fn))
+                                      (list :constraint-connection-test-fn
+                                            (graph/constraint-connection-test-function graph)))
+                                  (if (null (getf args :subgraph-properties-copy-fn))
+                                      (list :subgraph-properties-copy-fn
+                                            (graph/subgraph-properties-copy-function graph)))
                                   args))))
     (graph/add-nodes! new-graph nodes)
     (graph/connect-set! new-graph connections)
@@ -688,17 +696,24 @@
          (connections (mapcar #'copy-connection
                               (graph/internal-connections graph existing-labels)))
          (subgraph
-          (copy-object
-           graph (nconc (list :constraint-node-test-fn
-                              (graph/constraint-node-test-function graph)
-                              :constraint-connection-test-fn
-                              (graph/constraint-connection-test-function graph)
-                              :properties
-                              (let ((properties-transfer-fn
-                                     (getf args :properties-transfer-fn (constantly nil))))
-                                (funcall properties-transfer-fn (object/properties graph))))
+          (copy-abstract-object
+           graph (nconc (if (null (getf args :constraint-node-test-fn))
+                            (list :constraint-node-test-fn
+                                  (graph/constraint-node-test-function graph)))
+                        (if (null (getf args :constraint-connection-test-fn))
+                            (list :constraint-connection-test-fn
+                                  (graph/constraint-connection-test-function graph)))
+                        (if (null (getf args :subgraph-properties-copy-fn))
+                            (list :subgraph-properties-copy-fn
+                                  (graph/subgraph-properties-copy-function graph)))
+                        (if (null (getf args :properties))
+                            (list :properties
+                                  (let ((properties-transfer-fn
+                                         (getf args :properties-transfer-fn
+                                               (graph/subgraph-properties-copy-function graph))))
+                                    (funcall properties-transfer-fn (object/properties graph)))))
                         (alexandria:remove-from-plist
-                         args :properties :properties-transfer-fn)))))
+                         args :properties-transfer-fn)))))
     (graph/add-nodes! subgraph nodes)
     (graph/connect-set! subgraph connections)
     subgraph))

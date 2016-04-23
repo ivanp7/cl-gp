@@ -121,13 +121,17 @@
                          args :source :target :properties :event-handler-fn :info-string-fn)))))
 
 (defun copy-connection (connection &optional args)
-  (copy-abstract-object connection
-                        (nconc (list :source (connection/source-label connection)
-                                     :target (connection/target-label connection)
-                                     :arrow (let ((arrow (connection/arrow connection)))
-                                              (if arrow (copy-arrow arrow)))
-                                     :arrow->string-fn (connection/arrow->string connection))
-                               args)))
+  (copy-abstract-object
+   connection (nconc (if (null (getf args :source))
+                         (list :source (connection/source-label connection)))
+                     (if (null (getf args :target))
+                         (list :target (connection/target-label connection)))
+                     (if (null (getf args :arrow))
+                         (list :arrow (let ((arrow (connection/arrow connection)))
+                                        (if arrow (copy-arrow arrow)))))
+                     (if (null (getf args :arrow->string-fn))
+                         (list :arrow->string-fn (connection/arrow->string connection)))
+                     args)))
 
 (defmethod copy-object ((object object/connection) &rest args)
   (copy-connection object args))

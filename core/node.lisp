@@ -17,6 +17,10 @@
            :initarg :groups
            :initform nil)))
 
+(defmethod initialize-instance :after ((instance object/node) &key)
+  (with-slots (groups) instance
+    (setf groups (copy-list groups))))
+
 (defconstant +kind/node+ 'node)
 
 (defmethod object/kind ((object object/node))
@@ -48,9 +52,12 @@
                          args :label :properties :event-handler-fn :info-string-fn)))))
 
 (defun copy-node (node &optional args)
-  (copy-abstract-object node (nconc (list :label (node/label node)
-                                          :groups (copy-list (node/groups node)))
-                                    args)))
+  (copy-abstract-object
+   node (nconc (if (null (getf args :label))
+                   (list :label (node/label node)))
+               (if (null (getf args :groups))
+                   (list :groups (copy-list (node/groups node))))
+               args)))
 
 (defmethod copy-object ((object object/node) &rest args)
   (copy-node object args))
