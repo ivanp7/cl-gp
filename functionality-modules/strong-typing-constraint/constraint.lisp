@@ -2,6 +2,8 @@
 
 (in-package #:cl-gp)
 
+;; реализовать параллельные значения на коннекторах в системе ограничений
+
 ;;; *** connection CPS constraint ***
 
 (defclass cps-constraint/connection (cps/abstract-constraint)
@@ -150,54 +152,56 @@
    :event-handler-fn-getter
    #'(lambda (kind)
        (alexandria:switch (kind :test #'kind-equal)
-         (+kind/node+ #'(lambda (node event &rest args)
-                          (let ((connection (getf args :connection))
-                                (graph (getf args :graph)))
-                            (case event
-                              (:on-initialization
-                               (let ((input-type (object/input-type node))
-                                     (output-type (object/output-type node)))
-                                 (dolist (constr (object/internal-type-variable-constraints
-                                                  node))
-                                   (cps-constraint/establish constr input-type output-type))))
-                              (:on-addition-to-graph
-                               (when (node/reference-master-source? node)
-                                 (let ((node-input-type-property
-                                        (properties/get-property
-                                         (object/properties node) :input-type))
-                                       (node-output-type-property
-                                        (properties/get-property
-                                         (object/properties node) :output-type))
-                                       (graph-input-type-property
-                                        (properties/get-property
-                                         (object/properties graph) :input-type))
-                                       (graph-output-type-property
-                                        (properties/get-property
-                                         (object/properties graph) :output-type)))
-                                   (property/register-value-setting-event-function!
-                                    node-input-type-property 'strong-typing nil
-                                    #'(lambda (value)
-                                        (setf (property/value graph-output-type-property)
-                                           value))
-                                    (property/value node-input-type-property))
-                                   (property/register-value-setting-event-function!
-                                    node-output-type-property 'strong-typing nil
-                                    #'(lambda (value)
-                                        (setf (property/value graph-input-type-property)
-                                           value))
-                                    (property/value node-output-type-property)))))
-                              (:on-deletion-from-graph
-                               #|FIIIIIIX|# nil)
-                              (:on-setting-of-connection
-                               #|FIIIIIIX|# nil)
-                              (:on-loss-of-connection
-                               #|FIIIIIIX|# nil)))))
-         (+kind/connection+ #'(lambda (connection event &rest args)
-                                (case event
-                                  (:on-addition-to-graph
-                                   #|FIIIIIIX|# nil)
-                                  (:on-deletion-from-graph
-                                   #|FIIIIIIX|# nil))))
+         (+kind/node+
+          #'(lambda (node event &rest args)
+              (let ((connection (getf args :connection))
+                    (graph (getf args :graph)))
+                (case event
+                  (:on-initialization
+                   (let ((input-type (object/input-type node))
+                         (output-type (object/output-type node)))
+                     (dolist (constr (object/internal-type-variable-constraints
+                                      node))
+                       (cps-constraint/establish constr input-type output-type))))
+                  (:on-addition-to-graph
+                   (when (node/reference-master-source? node)
+                     (let ((node-input-type-property
+                            (properties/get-property
+                             (object/properties node) :input-type))
+                           (node-output-type-property
+                            (properties/get-property
+                             (object/properties node) :output-type))
+                           (graph-input-type-property
+                            (properties/get-property
+                             (object/properties graph) :input-type))
+                           (graph-output-type-property
+                            (properties/get-property
+                             (object/properties graph) :output-type)))
+                       (property/register-value-setting-event-function!
+                        node-input-type-property 'strong-typing nil
+                        #'(lambda (value)
+                            (setf (property/value graph-output-type-property)
+                               value))
+                        (property/value node-input-type-property))
+                       (property/register-value-setting-event-function!
+                        node-output-type-property 'strong-typing nil
+                        #'(lambda (value)
+                            (setf (property/value graph-input-type-property)
+                               value))
+                        (property/value node-output-type-property)))))
+                  (:on-deletion-from-graph
+                   #|FIIIIIIX|# nil)
+                  (:on-setting-of-connection
+                   #|FIIIIIIX|# nil)
+                  (:on-loss-of-connection
+                   #|FIIIIIIX|# nil)))))
+         (+kind/connection+
+          #'(lambda (connection event &rest args)
+              (case event
+                (:on-addition-to-graph
+                 #|FIIIIIIX|# nil)
+                (:on-deletion-from-graph
+                 #|FIIIIIIX|# nil))))
          (t (constantly nil))))
    :init-args-getter
    #'(lambda (kind)
@@ -215,7 +219,7 @@
                      (make-property :output-type output-type
                                     :value-copy-fn #'copy-type-entity)
                      (make-property :internal-type-variable-constraints
-                                    internal-type-variable-constraints-list
+                                    (copy-list internal-type-variable-constraints-list)
                                     :value-copy-fn #'(lambda (constraints)
                                                        (mapcar #'copy-cps-constraint
                                                                constraints)))))))
