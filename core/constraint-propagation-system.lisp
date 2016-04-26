@@ -7,7 +7,7 @@
 (defclass cps/abstract-constraint ()
   ())
 
-(defgeneric cps-constraint/establish (this &key &allow-other-keys)
+(defgeneric cps-constraint/establish (this &rest args)
   (:documentation ""))
 
 (defgeneric cps-constraint/abolish (this)

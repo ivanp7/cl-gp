@@ -10,6 +10,10 @@
 (defgeneric selector/description-string (selector)
   (:documentation "Get selector description string"))
 
+(defmethod selector/description-string ((selector abstract-selector))
+  (let ((*print-circle* nil))
+    (format nil "~:S" selector)))
+
 (defgeneric copy-selector (selector)
   (:documentation "Copy selector object"))
 
@@ -29,9 +33,13 @@
 (defun arrow/description-string (arrow &key no-object-class-name)
   (with-slots (source-selector target-selector) arrow
     (let ((descr (concatenate 'string
-                              (selector/description-string source-selector)
+                              (if source-selector
+                                  (selector/description-string source-selector)
+                                  "()")
                               " -> "
-                              (selector/description-string target-selector))))
+                              (if target-selector
+                                  (selector/description-string target-selector)
+                                  "()"))))
       (if no-object-class-name
           descr
           (concatenate 'string "ARROW " descr)))))
@@ -82,43 +90,28 @@
                                          " ")
                             " -> ")))))
 
-(defconstant +kind/connection+ 'connection)
-
-(defmethod object/kind ((object object/connection))
-  +kind/connection+)
-
 (defun object/connection? (object)
-  (kind-equal (object/kind object) +kind/connection+))
+  (typep object 'object/connection))
 
 (defun connection/regular? (connection)
   (purpose-equal (object/purpose connection) +purpose/regular+))
 
-(define-description-string-method object/connection
+(define-description-string-method (object/connection 'connection)
   (let ((*print-circle* nil))
-    (with-slots (source target arrow purpose properties info-string-fn) object
-      (let ((info (funcall info-string-fn object)))
-        (concatenate 'string
-                     (format nil "~S [~S]~A[~S]"
-                             purpose
-                             source
-                             (funcall (connection/arrow->string object)
-                                      arrow purpose)
-                             target)
-                     (if (plusp (length info)) " " "")
-                     info)))))
+    (with-slots (source target arrow) object
+      (format nil "[~S]~A[~S]"
+              source
+              (funcall (connection/arrow->string object)
+                       arrow purpose)
+              target))))
 
 
 
 (defun make-connection (source-label target-label &rest args)
-  (~object-init-args-handling-let (+kind/connection+ args)
-    (make-object 'object/connection
-                 (nconc (list :source source-label
-                              :target target-label
-                              :properties properties-container
-                              :event-handler-fn event-handler-function
-                              :info-string-fn info-string-function)
-                        (alexandria:delete-from-plist
-                         args :source :target :properties :event-handler-fn :info-string-fn)))))
+  (make-object 'object/connection
+               (nconc (list :source source-label
+                            :target target-label)
+                      (alexandria:delete-from-plist args :source :target))))
 
 (defun copy-connection (connection &optional args)
   (copy-abstract-object
