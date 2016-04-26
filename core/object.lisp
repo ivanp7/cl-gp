@@ -63,9 +63,15 @@
                            (extra-info (function-collection/call-all-functions
                                         info-string-fn-collection
                                         (list object)))
-                           (info (if (plusp (length extra-info))
-                                     (concatenate 'string kind-specific-info " " extra-info)
-                                     kind-specific-info)))
+                           (info (cond
+                                   ((and (plusp (length kind-specific-info))
+                                       (plusp (length extra-info)))
+                                    (concatenate 'string kind-specific-info " " extra-info))
+                                   ((plusp (length kind-specific-info))
+                                    kind-specific-info)
+                                   ((plusp (length extra-info))
+                                    extra-info)
+                                   (t ""))))
                       (let ((*print-circle* nil))
                         (if (plusp (length info))
                             (format nil "~S ~A" purpose info)
@@ -86,74 +92,6 @@
       (format st (object/description-string instance)))))
 
 
-#|
-(defmacro ~object-init-args-handling-let ((object-kind args) &body body)
-  (alexandria:with-gensyms (funct-info-string-fn-packages
-                            custom-info-string-fn-first
-                            functionality-modules)
-    `(let* ((,funct-info-string-fn-packages
-             (getf ,args :info-string-fn-getter-containers
-                   *info-string-function-packages*))
-            (,custom-info-string-fn-first (getf ,args :custom-info-string-fn-first))
-            (,functionality-modules
-             (getf ,args :structural-constraints *functionality-modules*))
-            (,args (alexandria:delete-from-plist ,args
-                                                 :info-string-fn-getter-containers
-                                                 :custom-info-string-fn-first
-                                                 :structural-constraints))
-            (,args (nconc (list (gensym) nil) ,args))
-            (properties-container
-             (adjoin-properties
-              (nconc (alexandria:ensure-list (getf ,args :properties))
-                     (mapcar
-                      #'(lambda (module)
-                          (apply
-                           (let ((fn (funcall
-                                      (functionality-module/properties-constructor-function-getter
-                                       module) ,object-kind)))
-                             (if fn fn (constantly nil)))
-                           (iterate:iter
-                             (with keys = (funcall
-                                           (functionality-module/init-key-arguments-getter
-                                            module) ,object-kind))
-                             (for tail initially ,args then (cddr tail))
-                             (while (cddr tail))
-                             (when (member (caddr tail) keys)
-                               (nconcing (list (caddr tail) (cadddr tail)))
-                               (setf (cddr tail) (cddddr tail))))))
-                      ,functionality-modules))))
-            (,args (cddr ,args))
-            (event-handler-function
-             (make-conjoint-event-handler-function
-              (nconc (mapcar #'(lambda (module)
-                                 (funcall
-                                  (functionality-module/event-handler-function-getter
-                                   module) ,object-kind))
-                             ,functionality-modules)
-                     (list (getf ,args :event-handler-fn)))))
-            (info-string-function
-             (make-conjoint-info-string-function
-              (let ((custom-fn (getf ,args :info-string-fn))
-                    (fn-list
-                     (mapcar
-                      #'(lambda (container)
-                          (funcall
-                           (info-string-function-package/info-string-function-getter
-                            container) ,object-kind))
-                      ,funct-info-string-fn-packages)))
-                (if ,custom-info-string-fn-first
-                    (cons custom-fn fn-list)
-                    (nconc fn-list (list custom-fn)))))))
-       ,@body)))
-
-(defun make-object (object-class &optional args)
-  (let ((object (apply (alexandria:curry #'make-instance object-class) args)))
-    (function-collection/call-all-functions
-     (object/event-handler-function-collection object)
-     (list object :on-initialization))
-    object))
-|#
-
 
 (labels ((destructively-cut-properties-from-plist (key-list plist)
            (iterate:iter
@@ -169,14 +107,14 @@
             (cons custom-properties
                   (mapcar
                    #'(lambda (module)
-                       (apply
-                        (let ((fn (funcall
-                                   (functionality-module/properties-constructor-function-getter
-                                    module) object-class purpose)))
-                          (if fn fn (constantly nil)))
-                        (destructively-cut-properties-from-plist
-                         (funcall (functionality-module/init-key-arguments-getter module)
-                                  object-class purpose) args)))
+                       (multiple-value-bind (prop-constr-fn init-key-args)
+                           (funcall
+                            (functionality-module/properties-constructor-function-getter
+                             module) object-class purpose)
+                         (if prop-constr-fn
+                             (apply prop-constr-fn
+                                    (destructively-cut-properties-from-plist
+                                     init-key-args args)))))
                    functionality-modules))))
          (add-constraints-and-event-handlers! (object
                                                object-class custom-constraint-fn
@@ -190,32 +128,38 @@
               (object/event-handler-function-collection object)
               nil nil custom-event-handler))
            (dolist (module (reverse functionality-modules))
-             (function-collection/add-function!
-              (object/constraint-function-collection object)
-              (functionality-module/name module) nil
-              (funcall (functionality-module/constraint-function-getter module)
-                       object-class object))
-             (function-collection/add-function!
-              (object/event-handler-function-collection object)
-              (functionality-module/name module) nil
-              (funcall (functionality-module/event-handler-function-getter module)
-                       object-class object))))
+             (let ((constraint-fn
+                    (funcall (functionality-module/constraint-function-getter module)
+                             object-class object))
+                   (event-handler-fn
+                    (funcall (functionality-module/event-handler-function-getter module)
+                             object-class object)))
+               (if constraint-fn
+                   (function-collection/add-function!
+                    (object/constraint-function-collection object)
+                    (functionality-module/name module) nil constraint-fn))
+               (if event-handler-fn
+                   (function-collection/add-function!
+                    (object/event-handler-function-collection object)
+                    (functionality-module/name module) nil event-handler-fn)))))
          (add-info-string-functions! (object
                                       object-class custom-info-string-fn
                                       custom-info-string-fn-first info-string-fn-packages)
            (when (and custom-info-string-fn
-                    (not custom-info-string-fn-first))
+                      (not custom-info-string-fn-first))
              (function-collection/add-function!
               (object/info-string-function-collection object)
               nil nil custom-info-string-fn))
            (dolist (pckg info-string-fn-packages)
-             (function-collection/add-function!
-              (object/info-string-function-collection object)
-              (info-string-function-package/name pckg) nil
-              (funcall (info-string-function-package/info-string-function-getter pckg)
-                       object-class object)))
+             (let ((info-string-fn
+                    (funcall (info-string-function-package/info-string-function-getter pckg)
+                             object-class object)))
+               (if info-string-fn
+                   (function-collection/add-function!
+                    (object/info-string-function-collection object)
+                    (info-string-function-package/name pckg) nil info-string-fn))))
            (when (and custom-info-string-fn
-                    custom-info-string-fn-first)
+                      custom-info-string-fn-first)
              (function-collection/add-function!
               (object/info-string-function-collection object)
               nil nil custom-info-string-fn))))
@@ -289,6 +233,6 @@
       (properties/set-property-value! (object/properties object) key new-value)
       (progn
         (setf (object/properties object)
-           (make-property-collection
-            (list (make-property key new-value))))
+              (make-property-collection
+               (list (make-property key new-value))))
         new-value)))

@@ -33,12 +33,12 @@
                        "functionality-modules/reference/reference"))
 
    (:file "functionality-modules/strong-typing-constraint/type-entity"
-          :depends-on ("package"))
+          :depends-on ("package"))#|
    (:file "functionality-modules/strong-typing-constraint/constraint"
-          :depends-on ("core/core"
-                       "functionality-modules/reference/reference"
-                       "functionality-modules/strong-typing-constraint/type-entity"))
-
+   :depends-on ("core/core"
+   "functionality-modules/reference/reference"
+   "functionality-modules/strong-typing-constraint/type-entity"))
+   |#
    ;; applications
    (:file "applications/application" :depends-on ("core/core"))
 

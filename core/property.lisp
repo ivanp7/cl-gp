@@ -186,6 +186,13 @@
      value-setting-event-handler-collection (list value))
     value))
 
+(defun property/force-value! (property new-value)
+  (let ((value-setting-fn (property/value-setting-function property)))
+    (setf (property/value-setting-function property) +property/writable+)
+    (setf (property/value property) new-value)
+    (setf (property/value-setting-function property) value-setting-fn)
+    new-value))
+
 ;;; *** properties ***
 
 (defparameter *property-key-test* #'eql)
@@ -262,6 +269,12 @@
         (progn
           (properties/add-property! prop-collection (make-property key new-value))
           new-value))))
+
+(defun properties/force-property-value! (prop-collection key new-value)
+  (let ((property (properties/get-property prop-collection key)))
+    (if (null property)
+        (properties/set-property-value! prop-collection key new-value)
+        (property/force-value! property new-value))))
 
 
 

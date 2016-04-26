@@ -24,10 +24,6 @@
     :accessor functionality-module/event-handler-function-getter
     :initarg :event-handler-fn-getter
     :initform (constantly nil))
-   (init-args-getter
-    :accessor functionality-module/init-key-arguments-getter
-    :initarg :init-args-getter
-    :initform (constantly nil))
    (properties-constr-fn-getter
     :accessor functionality-module/properties-constructor-function-getter
     :initarg :properties-constr-fn-getter
@@ -54,8 +50,6 @@
    (functionality-module/constraint-function-getter module)
    :event-handler-fn-getter
    (functionality-module/event-handler-function-getter module)
-   :init-args-getter
-   (functionality-module/init-key-arguments-getter module)
    :properties-constr-fn-getter
    (functionality-module/properties-constructor-function-getter module)))
 
@@ -90,13 +84,13 @@
     (with-slots (name) instance
       (format st "INFO-STRING-FUNCTION-PACKAGE ~S" name))))
 
-(defun make-functionality-info-string-function-package (&rest args)
+(defun make-info-string-function-package (&rest args)
   (apply (alexandria:curry #'make-instance
                            'object/info-string-function-package)
          args))
 
-(defun copy-functionality-info-string-function-package (info-package)
-  (make-functionality-info-string-function-package
+(defun copy-info-string-function-package (info-package)
+  (make-info-string-function-package
    :name (info-string-function-package/name info-package)
    :info-string-fn-getter
    (info-string-function-package/info-string-function-getter info-package)))

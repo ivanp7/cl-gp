@@ -7,84 +7,86 @@
 (defun object/name (object)
   (properties/get-property-value (object/properties object) :name))
 
-(defparameter *name-functionality*
-  (make-functionality-module
-   :name 'name-functionality
-   :event-handler-fn-getter
-   #'(lambda (kind)
-       (if (kind-equal kind +kind/node+)
-           #'(lambda (node event &rest args)
-               (let ((connection (getf args :connection))
-                     (graph (getf args :graph)))
+(flet ((bind-target-name! (node target)
+         (let ((node-name-property (properties/get-property
+                                    (object/properties node) :name))
+               (target-name-property (properties/get-property
+                                      (object/properties target) :name)))
+           (function-collection/add-function!
+            (property/value-setting-event-handler-collection node-name-property)
+            'name-functionality target
+            #'(lambda (value)
+             (property/force-value! target-name-property value))
+            t (list (property/value node-name-property)))))
+       (unbind-target-name! (node target)
+         (let* ((node-name-property (properties/get-property
+                                     (object/properties node) :name)))
+           (function-collection/call-function
+            (property/value-setting-event-handler-collection node-name-property)
+            'name-functionality target nil)
+           (function-collection/delete-function!
+            (property/value-setting-event-handler-collection node-name-property)
+            'name-functionality target)))
+       (unbind-all-bound-names! (node)
+         (let ((node-name-property (properties/get-property
+                                    (object/properties node) :name)))
+           (function-collection/call-functions
+            (property/value-setting-event-handler-collection node-name-property)
+            'name-functionality (list nil))
+           (function-collection/delete-functions!
+            (property/value-setting-event-handler-collection node-name-property)
+            'name-functionality))))
+
+  (defparameter *name-functionality*
+    (make-functionality-module
+     :name 'name-functionality
+     :dependencies-register-fn
+     #'(lambda ()
+         (register-functionality-module! *reference-functionality*))
+     :event-handler-fn-getter
+     #'(lambda (object-class object)
+         (declare (ignore object))
+         (if (eql object-class 'object/node)
+             #'(lambda (node event &key connection other-node graph)
                  (case event
                    (:on-addition-to-graph
                     (when (node/reference-master-source? node)
-                      (let ((node-name-property (properties/get-property
-                                                 (object/properties node) :name))
-                            (graph-name-property (properties/get-property
-                                                  (object/properties graph) :name)))
-                        (property/register-value-setting-event-function!
-                         node-name-property 'name-functionality nil
-                         #'(lambda (value)
-                             (setf (property/value graph-name-property)
-                                value))
-                         (property/value node-name-property)))))
+                      (bind-target-name! node graph)))
                    (:on-deletion-from-graph
-                    (let ((node-name-property (properties/get-property
-                                               (object/properties node) :name)))
-                      (property/call-value-setting-event-functions
-                       node-name-property 'name-functionality nil)
-                      (property/unregister-value-setting-event-functions!
-                       node-name-property 'name-functionality)))
+                    (unbind-all-bound-names! node))
                    (:on-setting-of-connection
                     (when (and (node/reference-source? node)
                              (connection/reference? connection))
-                      (let* ((other-node (graph/node graph
-                                                     (connection/other-node-label
-                                                      connection (node/label node))))
-                             (node-name-property (properties/get-property
-                                                  (object/properties node)
-                                                  :name))
-                             (other-node-name-property (properties/get-property
-                                                        (object/properties other-node)
-                                                        :name)))
-                        (property/register-value-setting-event-function!
-                         node-name-property 'name-functionality other-node
-                         #'(lambda (value)
-                             (setf (property/value
-                                 other-node-name-property)
-                                value))
-                         (property/value node-name-property)))))
+                      (bind-target-name! node other-node)))
                    (:on-loss-of-connection
                     (when (and (node/reference-source? node)
                              (connection/reference? connection))
-                      (let* ((other-node (graph/node graph
-                                                     (connection/other-node-label
-                                                      connection (node/label node))))
-                             (node-name-property (properties/get-property
-                                                  (object/properties node) :name)))
-                        (property/call-value-setting-event-function
-                         node-name-property 'name-functionality other-node nil)
-                        (property/unregister-value-setting-event-function!
-                         node-name-property 'name-functionality other-node)))))))))
-   :init-args-getter
-   #'(lambda (kind)
-       (if (not (kind-equal kind +kind/connection+))
-           '(:name)))
-   :properties-constr-fn-getter
-   #'(lambda (kind)
-       (if (not (kind-equal kind +kind/connection+))
-           #'(lambda (&key name)
-               (make-property :name name))))))
+                      (unbind-target-name! node other-node)))))))
+     :properties-constr-fn-getter
+     #'(lambda (object-class purpose)
+         (if (or (eql object-class 'object/node)
+                (eql object-class 'object/graph))
+             (let ((name-not-writable
+                    (or (eql object-class 'object/graph)
+                       (purpose-equal purpose +purpose/reference-target+))))
+               (values #'(lambda (&key name)
+                           (make-property :name name
+                                          :value-setting-fn
+                                          (if name-not-writable
+                                              +property/read-only+
+                                              +property/writable+)))
+                       (unless name-not-writable
+                         '(:name)))))))))
 
 (defparameter *name-info-string-function-package*
-  (make-functionality-info-string-function-package
+  (make-info-string-function-package
    :name :name
    :info-string-fn-getter
-   #'(lambda (kind)
-       (if (or (kind-equal kind +kind/node+)
-              (kind-equal kind +kind/graph+))
+   #'(lambda (object-class object)
+       (declare (ignore object))
+       (if (or (eql object-class 'object/node)
+              (eql object-class 'object/graph))
            #'(lambda (object)
                (let ((*print-circle* nil))
-                 (format nil "{NAME ~S}"
+                 (format nil "NAME: ~S"
                          (object/name object))))))))

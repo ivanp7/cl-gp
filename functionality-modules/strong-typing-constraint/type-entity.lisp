@@ -113,38 +113,38 @@
 (defclass abstract-special-type (abstract-type-kind)
   ())
 
-(defclass bottom-type (abstract-special-type)
+(defclass object/bottom-type (abstract-special-type)
   ())
 
-(defmethod type-entity/description-string ((entity bottom-type) &key no-class-name)
+(defmethod type-entity/description-string ((entity object/bottom-type) &key no-class-name)
   (declare (ignore entity))
   (if (not no-class-name)
       "BOTTOM-TYPE" ""))
 
 (defun type/bottom-type? (entity)
-  (typep entity 'bottom-type))
+  (typep entity 'object/bottom-type))
 
-(alexandria:define-constant +bottom-type+ (make-instance 'bottom-type)
-  :test (constantly t))
+(defun bottom-type ()
+  (load-time-value (make-instance 'object/bottom-type) t))
 
-(defclass top-type (abstract-special-type)
+(defclass object/top-type (abstract-special-type)
   ())
 
-(defmethod type-entity/description-string ((entity top-type) &key no-class-name)
+(defmethod type-entity/description-string ((entity object/top-type) &key no-class-name)
   (declare (ignore entity))
   (if (not no-class-name)
       "TOP-TYPE" ""))
 
 (defun type/top-type? (entity)
-  (typep entity 'top-type))
+  (typep entity 'object/top-type))
 
-(alexandria:define-constant +top-type+ (make-instance 'top-type)
-  :test (constantly t))
+(defun top-type ()
+  (load-time-value (make-instance 'object/top-type) t))
 
 
 
 (defmethod type-entity/component-type ((entity abstract-type-entity) component)
-  +bottom-type+)
+  (bottom-type))
 
 ;;; *** data types ***
 ;;; ******************
@@ -191,12 +191,12 @@
 (defmethod type-entity/reducibility-test ((source-entity abstract-data-type)
                                           (target-entity abstract-data-type))
   (let ((result (funcall (type/reducibility-test-function target-entity)
-                         source-entity target-entity :to)))
+                         source-entity target-entity :target)))
     (if (eql result t)
         t
         (reducibility-test-result-max
          result (funcall (type/reducibility-test-function source-entity)
-                         source-entity target-entity :from)))))
+                         source-entity target-entity :source)))))
 
 (defmacro define-type-reducibility-test-method (source-type-class target-type-class &body body)
   `(defmethod type-entity/reducibility-test ((source-entity ,source-type-class)
@@ -217,7 +217,7 @@
       (properties/set-property-value! (type/properties entity) key new-value)
       (progn
         (setf (type/properties entity)
-           (make-properties-container
+           (make-property-collection
             (list (make-property key new-value))))
         new-value)))
 
@@ -230,13 +230,18 @@
 
 (defparameter *field/name-test* #'eql)
 
+(defun field-name-equal (name1 name2)
+  (funcall *field/name-test* name1 name2))
+
+
+
 (defclass object/field ()
   ((name :reader field/name
          :initarg :name
          :initform (error "FIELD -- :name parameter must be supplied"))
    (type-entity :reader field/type
                 :initarg :type
-                :initform +bottom-type+)))
+                :initform (bottom-type))))
 
 (defun field/description-string (field)
   (let ((*print-circle* nil))
@@ -282,16 +287,18 @@
                         "{RECORD: ~:A}" "~:A")
                   (mapcar #'field/description-string (record/fields entity)))))))
 
-(defun make-record (fields-list)
+(defun make-record (fields-list &rest args)
   (if (= (length fields-list)
          (length (remove-duplicates fields-list
                                     :test *field/name-test*
                                     :key #'field/name)))
-      (make-data-type 'object/record (list :fields fields-list))
-      (error "MAKE-RECORD -- a record cannot have fields with identical names")))
+      (make-data-type 'object/record
+                      (nconc (list :fields fields-list)
+                             (alexandria:remove-from-plist args :fields)))
+      (error "MAKE-RECORD -- record cannot have fields with identical names")))
 
-(alexandria:define-constant +unit-type+ (make-record nil)
-  :test (constantly t))
+(defun unit-type ()
+  (load-time-value (make-record nil) t))
 
 (defun copy-record (record &optional args)
   (copy-abstract-data-type
@@ -377,7 +384,7 @@
   (let ((field (find component (record/fields entity)
                      :test *field/name-test* :key #'field/name)))
     (if (null field)
-        +bottom-type+
+        (bottom-type)
         (field/type field))))
 
 ;;; *** function type ***
@@ -385,10 +392,10 @@
 (defclass object/function-type (abstract-solid-data-type)
   ((argument :accessor function-type/argument
              :initarg :argument
-             :initform +bottom-type+)
+             :initform (bottom-type))
    (result :accessor function-type/result
            :initarg :result
-           :initform +bottom-type+)))
+           :initform (bottom-type))))
 
 (defun type/function-type? (entity)
   (typep entity 'object/function-type))
@@ -400,10 +407,11 @@
             (type-entity/description-string (function-type/argument entity))
             (type-entity/description-string (function-type/result entity)))))
 
-(defun make-function-type (argument-type result-type)
+(defun make-function-type (argument-type result-type &rest args)
   (make-data-type 'object/function-type
-                  (list :argument argument-type
-                        :result result-type)))
+                  (nconc (list :argument argument-type
+                               :result result-type)
+                         (alexandria:remove-from-plist args :argument :result))))
 
 (defun copy-function-type (entity &optional args)
   (copy-abstract-data-type
@@ -429,16 +437,21 @@
 
 (defparameter *parametric-type/name-test* #'eql)
 
+(defun type-name-equal (name1 name2)
+  (funcall *parametric-type/name-test* name1 name2))
+
+
+
 (defclass object/parametric-type (abstract-solid-data-type)
   ((name :accessor parametric-type/name
          :initarg :name
          :initform (error "PARAMETRIC-TYPE -- :name parameter must be supplied"))
    (parameter :accessor parametric-type/parameter
               :initarg :parameter
-              :initform +unit-type+)
+              :initform (unit-type))
    (component-type-fn :accessor parametric-type/component-type-function
                       :initarg :component-type-fn
-                      :initform (constantly +bottom-type+))))
+                      :initform (constantly (bottom-type)))))
 
 (defun type/parametric-type? (entity)
   (typep entity 'object/parametric-type))
@@ -459,14 +472,16 @@
                         (type-entity/description-string parameter
                                                         :no-class-name t))))))
 
-(defun make-parametric-type (name parameters-record &optional component-type-fn)
+(defun make-parametric-type (name parameters-record &rest args)
   (make-data-type 'object/parametric-type
                   (nconc (list :name name :parameter parameters-record)
-                         (if component-type-fn
-                             (list :component-type-fn component-type-fn)))))
+                         (alexandria:remove-from-plist args :name :parameter))))
 
-(defun make-primitive-type (name)
-  (make-parametric-type name +unit-type+))
+(defun make-primitive-type (name &rest args)
+  (apply (alexandria:curry #'make-parametric-type name (unit-type)) args))
+
+(defun primitive-type/name (object)
+  (parametric-type/name object))
 
 (defun copy-parametric-type (entity &optional args)
   (copy-abstract-data-type
@@ -504,8 +519,8 @@
 (defun make-type-class (membership-test-fn)
   (make-instance 'object/type-class :membership-test-fn membership-test-fn))
 
-(alexandria:define-constant +top-type-class+ (make-type-class (constantly t))
-  :test (constantly t))
+(defun top-type-class ()
+  (load-time-value (make-type-class (constantly t)) t))
 
 ;;; *** type variable ***
 
@@ -518,7 +533,7 @@
                :initform (error "TYPE-VARIABLE -- :type-class parameter must be supplied"))
    (cps-connector :initform (make-cps-connector))))
 
-(defun make-type-variable (label &optional (type-class-object +top-type-class+) args)
+(defun make-type-variable (label &optional (type-class-object (top-type-class)) args)
   (apply (alexandria:curry #'make-instance 'type-variable
                            :label label
                            :type-class type-class-object) args))

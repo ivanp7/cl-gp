@@ -50,16 +50,21 @@
 (defparameter *reference-functionality*
   (make-functionality-module
    :name 'reference-functionality
-   :constraint-node-test-fn
-   #'(lambda (node graph)
-       (or (not (node/reference-master-source? node))
-          (not (member +purpose/reference-master-source+
-                (nth-value 1 (graph/all-nodes graph))
-                :test *purpose-test*))))
-   :constraint-connection-test-fn
-   #'(lambda (source-node target-node connection graph)
-       (or (not (connection/reference? connection))
-          (and (node/reference-source? source-node)
-             (node/reference-target? target-node)
-             (null (graph/input-connections graph (list target-node)
-                                            :purpose +purpose/reference+)))))))
+   :constraint-fn-getter
+   #'(lambda (object-class object)
+       (case object-class
+         (object/node
+          (if (node/reference-master-source? object)
+              #'(lambda (node graph)
+                  (declare (ignore node))
+                  (not (member +purpose/reference-master-source+
+                        (nth-value 1 (graph/all-nodes graph))
+                        :test *purpose-test*)))))
+         (object/connection
+          (if (connection/reference? object)
+              #'(lambda (connection graph source-node target-node)
+                  (declare (ignore connection))
+                  (and (node/reference-source? source-node)
+                     (node/reference-target? target-node)
+                     (null (graph/input-connections graph (list target-node)
+                                                    :purpose +purpose/reference+))))))))))
