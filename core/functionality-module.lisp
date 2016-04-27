@@ -2,7 +2,7 @@
 
 (in-package #:cl-gp)
 
-(defparameter *functionality-modules* nil)
+(defvar *functionality-modules* nil)
 
 (defparameter *functionality-module-name-test* #'eql)
 
@@ -66,7 +66,7 @@
 
 ;;; *** functionality info string function package ***
 
-(defparameter *info-string-function-packages* nil)
+(defvar *info-string-function-packages* nil)
 
 (defparameter *info-string-function-package-name-test* #'eql)
 

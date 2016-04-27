@@ -48,10 +48,11 @@
 
 (defmethod type-entity/has-associated-entity? ((entity abstract-type-entity))
   (declare (ignore entity))
-  t)
+  nil)
 
 (defmethod type-entity/associated-entity ((entity abstract-type-entity))
-  entity)
+  (declare (ignore entity))
+  nil)
 
 (defmethod type-entity/associate-entity! ((entity abstract-type-entity) associated-entity setter)
   (declare (ignore entity associated-entity setter))
@@ -62,10 +63,9 @@
   nil)
 
 (defun type-entity/actual-entity (entity)
-  (let ((assoc-entity (type-entity/associated-entity entity)))
-    (if (eql entity assoc-entity)
-        entity
-        (type-entity/actual-entity assoc-entity))))
+  (if (type-entity/has-associated-entity? entity)
+      (type-entity/actual-entity (type-entity/associated-entity entity))
+      entity))
 
 
 
@@ -104,13 +104,13 @@
 ;;; *** abstract type ***
 ;;; *********************
 
-(defclass abstract-type-kind (abstract-type-entity)
+(defclass abstract-type (abstract-type-entity)
   ())
 
 ;;; *** special types ***
 ;;; *********************
 
-(defclass abstract-special-type (abstract-type-kind)
+(defclass abstract-special-type (abstract-type)
   ())
 
 (defclass object/bottom-type (abstract-special-type)
@@ -149,7 +149,7 @@
 ;;; *** data types ***
 ;;; ******************
 
-(defclass abstract-data-type (abstract-type-kind)
+(defclass abstract-data-type (abstract-type)
   ((reducibility-test-fn :accessor type/reducibility-test-function
                          :initarg :reducibility-test-fn
                          :initform (constantly nil))
@@ -228,10 +228,10 @@
 
 ;;; *** record (product type) ***
 
-(defparameter *field/name-test* #'eql)
+(defparameter *field-name-test* #'eql)
 
 (defun field-name-equal (name1 name2)
-  (funcall *field/name-test* name1 name2))
+  (funcall *field-name-test* name1 name2))
 
 
 
@@ -290,7 +290,7 @@
 (defun make-record (fields-list &rest args)
   (if (= (length fields-list)
          (length (remove-duplicates fields-list
-                                    :test *field/name-test*
+                                    :test *field-name-test*
                                     :key #'field/name)))
       (make-data-type 'object/record
                       (nconc (list :fields fields-list)
@@ -336,35 +336,35 @@
          (tgt-fields-bottom-type (remove-if-not #'type/bottom-type? tgt-fields
                                                 :key #'field/type)))
     (unless (or (intersection src-fields-bottom-type tgt-fields
-                             :test *field/name-test* :key #'field/name)
+                             :test *field-name-test* :key #'field/name)
                (intersection tgt-fields-bottom-type src-fields
-                             :test *field/name-test* :key #'field/name))
+                             :test *field-name-test* :key #'field/name))
       (let* ((src-fields (nset-difference src-fields src-fields-bottom-type
-                                          :test *field/name-test* :key #'field/name))
+                                          :test *field-name-test* :key #'field/name))
              (tgt-fields (nset-difference tgt-fields tgt-fields-bottom-type
-                                          :test *field/name-test* :key #'field/name))
+                                          :test *field-name-test* :key #'field/name))
              (matching-fields-names (mapcar #'field/name
                                             (intersection src-fields tgt-fields
-                                                          :test *field/name-test*
+                                                          :test *field-name-test*
                                                           :key #'field/name)))
              (src-matching-fields (remove-if-not
                                    #'(lambda (name) (member name matching-fields-names
-                                                  :test *field/name-test*))
+                                                  :test *field-name-test*))
                                    src-fields :key #'field/name))
              (tgt-matching-fields-shuffled (remove-if-not
                                             #'(lambda (name) (member name matching-fields-names
-                                                           :test *field/name-test*))
+                                                           :test *field-name-test*))
                                             tgt-fields :key #'field/name))
              (src-extra-fields (set-difference src-fields src-matching-fields
-                                               :test *field/name-test* :key #'field/name))
+                                               :test *field-name-test* :key #'field/name))
              (tgt-extra-fields (set-difference tgt-fields tgt-matching-fields-shuffled
-                                               :test *field/name-test* :key #'field/name)))
+                                               :test *field-name-test* :key #'field/name)))
         (if (not (null tgt-extra-fields))
             nil
             (let* ((tgt-matching-fields
                     (mapcar #'(lambda (src-field)
                                 (find-if #'(lambda (tgt-field-name)
-                                             (funcall *field/name-test*
+                                             (funcall *field-name-test*
                                                       (field/name src-field)
                                                       tgt-field-name))
                                          tgt-matching-fields-shuffled
@@ -382,7 +382,7 @@
 
 (defmethod type-entity/component-type ((entity object/record) component)
   (let ((field (find component (record/fields entity)
-                     :test *field/name-test* :key #'field/name)))
+                     :test *field-name-test* :key #'field/name)))
     (if (null field)
         (bottom-type)
         (field/type field))))
@@ -435,12 +435,10 @@
 
 ;;; *** parametric type ***
 
-(defparameter *parametric-type/name-test* #'eql)
+(defparameter *parametric-type-name-test* #'eql)
 
 (defun type-name-equal (name1 name2)
-  (funcall *parametric-type/name-test* name1 name2))
-
-
+  (funcall *parametric-type-name-test* name1 name2))
 
 (defclass object/parametric-type (abstract-solid-data-type)
   ((name :accessor parametric-type/name
@@ -499,7 +497,7 @@
   (copy-parametric-type entity args))
 
 (define-type-reducibility-test-method object/parametric-type object/parametric-type
-  (and (funcall *parametric-type/name-test*
+  (and (funcall *parametric-type-name-test*
               (parametric-type/name source-entity)
               (parametric-type/name target-entity))
      (type-entity/reducible? (parametric-type/parameter source-entity)
@@ -511,46 +509,146 @@
 ;;; *** type class ***
 ;;; ******************
 
-(defclass object/type-class ()
-  ((membership-test-fn :reader type-class/membership-test-function
-                       :initarg :membership-test-fn
-                       :initform (constantly nil))))
+(defparameter *type-class-name-test* #'eql)
 
-(defun make-type-class (membership-test-fn)
-  (make-instance 'object/type-class :membership-test-fn membership-test-fn))
+(defun type-class-name-equal (name1 name2)
+  (funcall *type-class-name-test* name1 name2))
+
+(defclass object/type-class ()
+  ((name :reader type-class/name
+         :initarg :name
+         :initform (error "TYPE-CLASS -- :name parameter must be supplied"))
+   (properties :accessor type-class/properties
+               :initarg :properties
+               :initform nil)
+   (reducibility-test-fn :accessor type-class/reducibility-test-function
+                         :initarg :reducibility-test-fn
+                         :initform (constantly nil))
+   (class-reducibility-test-fn :accessor type-class/class-reducibility-test-function
+                               :initarg :class-reducibility-test-fn
+                               :initform (constantly nil))))
+
+(defun type-class/description-string (type-class)
+  (with-slots (name) type-class
+    (let ((*print-circle* nil))
+      (format nil "TYPE-CLASS ~S" name))))
+
+(defmethod print-object ((instance object/type-class) st)
+  (print-unreadable-object (instance st)
+    (format st "~A" (type-class/description-string instance))))
+
+(defun make-type-class (name reducibility-test-fn class-reducibility-test-fn &key properties)
+  (make-instance 'object/type-class
+                 :name name
+                 :properties properties
+                 :reducibility-test-fn reducibility-test-fn
+                 :class-reducibility-test-fn class-reducibility-test-fn))
+
+(defun copy-type-class (type-class)
+  (make-type-class (type-class/name type-class)
+                   (type-class/reducibility-test-function type-class)
+                   (type-class/class-reducibility-test-function type-class)
+                   (copy-properties (type-class/properties type-class))))
 
 (defun top-type-class ()
-  (load-time-value (make-type-class (constantly t)) t))
+  (load-time-value (make-type-class 'top (constantly t)) t))
+
+(defun type-class/top-class? (type-class)
+  (type-class-name-equal (type-class/name type-class) 'top))
 
 ;;; *** type variable ***
 
-(defclass type-variable (abstract-type-entity)
-  ((label :reader type-variable/label
-          :initarg :label
-          :initform (error "TYPE-VARIABLE -- :label parameter must be supplied"))
+(defclass object/type-variable (abstract-type-entity)
+  ((name :reader type-variable/name
+         :initarg :name
+         :initform (error "TYPE-VARIABLE -- :name parameter must be supplied"))
    (type-class :reader type-variable/type-class
                :initarg :type-class
                :initform (error "TYPE-VARIABLE -- :type-class parameter must be supplied"))
    (cps-connector :initform (make-cps-connector))))
 
-(defun make-type-variable (label &optional (type-class-object (top-type-class)) args)
-  (apply (alexandria:curry #'make-instance 'type-variable
-                           :label label
-                           :type-class type-class-object) args))
+(defun type/type-variable? (entity)
+  (typep entity 'object/type-variable))
 
-(defmethod copy-type-entity ((entity type-variable) &rest args)
-  (make-type-variable (type-variable/label entity)
-                      (type-variable/type-class entity)
-                      args))
+(defmethod type-entity/description-string ((entity object/type-variable)
+                                           &key no-class-name)
+  (let ((*print-circle* nil))
+    (let ((descr (with-slots (name type-class) entity
+                   (format nil "~S: (~A)" name
+                           (type-class/description-string type-class)))))
+      (if (not no-class-name)
+          (concatenate 'string "TYPE-VARIABLE " descr)
+          descr))))
 
-(defmethod type-entity/has-associated-entity? ((entity type-variable))
+(defun make-type-variable (name &optional (type-class-object (top-type-class)) &rest args)
+  (apply (alexandria:curry #'make-instance 'object/type-variable
+                           :name name
+                           :type-class type-class-object)
+         (alexandria:remove-from-plist args :label :type-class)))
+
+(defun copy-type-variable (entity &optional args)
+  (copy-abstract-type-entity
+   (nconc (if (null (getf args :name))
+              (list :name (type-variable/name entity)))
+          (if (null (getf args :type-class))
+              (list :type-class (copy-type-class (type-variable/type-class entity))))
+          args)))
+
+(defmethod copy-type-entity ((entity object/type-variable) &rest args)
+  (copy-type-variable entity args))
+
+(defmethod type-entity/has-associated-entity? ((entity object/type-variable))
   (cps-connector/has-value? (slot-value entity 'cps-connector)))
 
-(defmethod type-entity/associated-entity ((entity type-variable))
-  (cps-connector/value (slot-value entity 'cps-connector)))
+(defmethod type-entity/associated-entity ((entity object/type-variable))
+  (with-slots (cps-connector) entity
+    (if (cps-connector/has-value? cps-connector)
+        (cps-connector/value cps-connector))))
 
-(defmethod type-entity/associate-entity! ((entity type-variable) associated-entity setter)
+(defmethod type-entity/associate-entity! ((entity object/type-variable) associated-entity setter)
   (cps-connector/set-value! (slot-value entity 'cps-connector) associated-entity setter))
 
-(defmethod type-entity/unassociate-entity! ((entity type-variable) retractor)
+(defmethod type-entity/unassociate-entity! ((entity object/type-variable) retractor)
   (cps-connector/forget-value! (slot-value entity 'cps-connector) retractor))
+
+
+
+(defmethod type-entity/reducibility-test ((source-entity abstract-special-type)
+                                          (target-entity object/type-variable))
+  (if (type/top-type? source-entity)
+      (if (type-class/top-class? (type-variable/type-class target-entity))
+          t :loss)))
+
+(defmethod type-entity/reducibility-test ((source-entity object/type-variable)
+                                          (target-entity abstract-special-type))
+  (declare (ignore source-entity))
+  (type/top-type? target-entity))
+
+(defmethod type-entity/reducibility-test ((source-entity abstract-data-type)
+                                          (target-entity object/type-variable))
+  (funcall (type-class/reducibility-test-function
+            (type-variable/type-class target-entity)
+            source-entity
+            (type-variable/type-class target-entity) :target)))
+
+(defmethod type-entity/reducibility-test ((source-entity object/type-variable)
+                                          (target-entity abstract-data-type))
+  (funcall (type-class/reducibility-test-function
+            (type-variable/type-class source-entity)
+            (type-variable/type-class source-entity)
+            target-entity :source)))
+
+(defmethod type-entity/reducibility-test ((source-entity object/type-variable)
+                                          (target-entity object/type-variable))
+  (let ((result (funcall (type-class/class-reducibility-test-function
+                          (type-variable/type-class target-entity)
+                          (type-variable/type-class source-entity)
+                          (type-variable/type-class target-entity) :target))))
+    (if (eql result t)
+        t
+        (reducibility-test-result-max
+         result
+         (funcall (type-class/class-reducibility-test-function
+                   (type-variable/type-class source-entity)
+                   (type-variable/type-class source-entity)
+                   (type-variable/type-class target-entity) :source))))))

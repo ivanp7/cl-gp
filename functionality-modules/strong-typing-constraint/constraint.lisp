@@ -10,7 +10,8 @@
   ((source-type-entity :initarg :source)
    (target-type-entity :initarg :target)))
 
-(defmethod cps-constraint/establish ((this cps-constraint/connection))
+(defmethod cps-constraint/establish ((this cps-constraint/connection) &rest args)
+  (declare (ignore args))
   (with-slots (source-type-entity target-type-entity) this
     (cps-connector/connect! (slot-value source-type-entity 'cps-connector) this)
     (cps-connector/connect! (slot-value target-type-entity 'cps-connector) this)))
@@ -68,7 +69,7 @@
       (cps-connector/disconnect! (slot-value typevar 'cps-connector) this))
     (setf type-variables-list nil)))
 
-(defmethod initialize-instance :after ((this cps-constraint/node))
+(defmethod initialize-instance :after ((this cps-constraint/node) &key)
   (with-slots (type-variables-list-getter cps-constraint-fn) this
     (unless cps-constraint-fn
       (setf cps-constraint-fn
@@ -109,10 +110,10 @@
 ;;; *** object property readers ***
 
 (defun object/input-type (object)
-  (object/get-property-value object :input-type +bottom-type+))
+  (object/get-property-value object :input-type (bottom-type)))
 
 (defun object/output-type (object)
-  (object/get-property-value object :output-type +bottom-type+))
+  (object/get-property-value object :output-type (bottom-type)))
 
 (defun object/type (object direction)
   (cond
@@ -211,9 +212,9 @@
    #'(lambda (kind)
        (alexandria:switch (kind :test #'kind-equal)
          (+kind/node+
-          #'(lambda (&key (input-type +bottom-type+) (output-type +bottom-type+)
+          #'(lambda (&key (input-type (bottom-type)) (output-type (bottom-type))
                   internal-type-variable-constraints-list)
-              (make-properties-container
+              (make-property-collection
                (list (make-property :input-type input-type
                                     :value-copy-fn #'copy-type-entity)
                      (make-property :output-type output-type
@@ -225,21 +226,21 @@
                                                                constraints)))))))
          (+kind/connection+
           #'(lambda ()
-              (make-properties-container
-               (list (make-property :input-type +bottom-type+
-                                    :value-copy-fn (constantly +bottom-type+))
-                     (make-property :output-type +bottom-type+
-                                    :value-copy-fn (constantly +bottom-type+))
+              (make-property-collection
+               (list (make-property :input-type (bottom-type)
+                                    :value-copy-fn (constantly (bottom-type)))
+                     (make-property :output-type (bottom-type)
+                                    :value-copy-fn (constantly (bottom-type)))
                      (make-property :internal-type-variable-constraints
                                     nil
                                     :value-copy-fn (constantly nil))))))
          (+kind/graph+
           #'(lambda ()
-              (make-properties-container
-               (list (make-property :input-type +bottom-type+
-                                    :value-copy-fn (constantly +bottom-type+))
-                     (make-property :output-type +bottom-type+
-                                    :value-copy-fn (constantly +bottom-type+))))))
+              (make-property-collection
+               (list (make-property :input-type (bottom-type)
+                                    :value-copy-fn (constantly (bottom-type)))
+                     (make-property :output-type (bottom-type)
+                                    :value-copy-fn (constantly (bottom-type)))))))
          (t (constantly nil))))))
 
 (defparameter *type-info-string-function-package*
@@ -250,6 +251,6 @@
        (declare (ignore kind))
        #'(lambda (object)
            (let ((*print-circle* nil))
-             (format nil "{TYPE ~S -> ~S}"
-                     (object/input-type object)
-                     (object/output-type object)))))))
+             (format nil "{TYPE: ~A -> ~A}"
+                     (type-entity/description-string (object/input-type object))
+                     (type-entity/description-string (object/output-type object))))))))
