@@ -548,13 +548,26 @@
   (make-type-class (type-class/name type-class)
                    (type-class/reducibility-test-function type-class)
                    (type-class/class-reducibility-test-function type-class)
-                   (copy-properties (type-class/properties type-class))))
-
-(defun top-type-class ()
-  (load-time-value (make-type-class 'top (constantly t)) t))
+                   :properties (copy-properties (type-class/properties type-class))))
 
 (defun type-class/top-class? (type-class)
   (type-class-name-equal (type-class/name type-class) 'top))
+
+(defun top-type-class ()
+  (load-time-value (make-type-class 'top
+                                    #'(lambda (source target fn-owner)
+                                        (declare (ignore source target))
+                                        (cond
+                                          ((eql fn-owner :target) t)
+                                          ((eql fn-owner :source) :loss)))
+                                    #'(lambda (source target fn-owner)
+                                        (declare (ignore source))
+                                        (cond
+                                          ((eql fn-owner :target) t)
+                                          ((eql fn-owner :source)
+                                           (if (type-class/top-class? target)
+                                               t :loss)))))
+                   t))
 
 ;;; *** type variable ***
 
@@ -627,28 +640,28 @@
 (defmethod type-entity/reducibility-test ((source-entity abstract-data-type)
                                           (target-entity object/type-variable))
   (funcall (type-class/reducibility-test-function
-            (type-variable/type-class target-entity)
-            source-entity
-            (type-variable/type-class target-entity) :target)))
+            (type-variable/type-class target-entity))
+           source-entity
+           (type-variable/type-class target-entity) :target))
 
 (defmethod type-entity/reducibility-test ((source-entity object/type-variable)
                                           (target-entity abstract-data-type))
   (funcall (type-class/reducibility-test-function
-            (type-variable/type-class source-entity)
-            (type-variable/type-class source-entity)
-            target-entity :source)))
+            (type-variable/type-class source-entity))
+           (type-variable/type-class source-entity)
+           target-entity :source))
 
 (defmethod type-entity/reducibility-test ((source-entity object/type-variable)
                                           (target-entity object/type-variable))
   (let ((result (funcall (type-class/class-reducibility-test-function
-                          (type-variable/type-class target-entity)
-                          (type-variable/type-class source-entity)
-                          (type-variable/type-class target-entity) :target))))
+                          (type-variable/type-class target-entity))
+                         (type-variable/type-class source-entity)
+                         (type-variable/type-class target-entity) :target)))
     (if (eql result t)
         t
         (reducibility-test-result-max
          result
          (funcall (type-class/class-reducibility-test-function
-                   (type-variable/type-class source-entity)
-                   (type-variable/type-class source-entity)
-                   (type-variable/type-class target-entity) :source))))))
+                   (type-variable/type-class source-entity))
+                  (type-variable/type-class source-entity)
+                  (type-variable/type-class target-entity) :source)))))

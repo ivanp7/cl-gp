@@ -10,9 +10,9 @@
   ((name :accessor functionality-module/name
          :initarg :name
          :initform (error "FUNCTIONALITY-MODULE -- :name parameter must be supplied"))
-   (dependencies-register-fn :accessor functionality-module/dependencies-register-function
-                             :initarg :dependencies-register-fn
-                             :initform (constantly nil))
+   (dependencies :accessor functionality-module/dependencies
+                 :initarg :dependencies
+                 :initform nil)
    (info-string-fn :accessor functionality-module/info-string-function
                    :initarg :info-string-fn
                    :initform (constantly ""))
@@ -43,8 +43,8 @@
 (defun copy-functionality-module (module)
   (make-functionality-module
    :name (functionality-module/name module)
-   :dependencies-register-fn
-   (functionality-module/dependencies-register-function module)
+   :dependencies
+   (copy-list (functionality-module/dependencies module))
    :info-string-fn (functionality-module/info-string-function module)
    :constraint-fn-getter
    (functionality-module/constraint-function-getter module)
@@ -61,7 +61,8 @@
                                :test *functionality-module-name-test*
                                :key #'functionality-module/name)))
     (unless (eql new-registry old-registry)
-      (funcall (functionality-module/dependencies-register-function module))
+      (dolist (dep (functionality-module/dependencies module))
+        (register-functionality-module! dep))
       t)))
 
 ;;; *** functionality info string function package ***
@@ -99,6 +100,6 @@
 
 (defun register-info-string-function-package! (pckg)
   (not (eql *info-string-function-packages*
-          (pushnew pckg *info-string-function-packages*
-                   :test *info-string-function-package-name-test*
-                   :key #'info-string-function-package/name))))
+            (pushnew pckg *info-string-function-packages*
+                     :test *info-string-function-package-name-test*
+                     :key #'info-string-function-package/name))))

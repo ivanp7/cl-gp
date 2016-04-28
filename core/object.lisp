@@ -20,6 +20,8 @@
    (properties :accessor object/properties
                :initarg :properties
                :initform nil)
+   (owner :reader object/owner
+          :initform nil)
    (constraint-fn-collection :accessor object/constraint-function-collection
                              :initarg :constraint-fn-collection
                              :initform (make-function-collection
@@ -47,7 +49,7 @@
 (defmethod initialize-instance :after ((instance abstract-object) &key)
   (with-slots (properties) instance
     (unless (object/property-collection? properties)
-      (setf properties (adjoin-properties (alexandria:ensure-list properties))))))
+      (setf properties (collect-properties (alexandria:ensure-list properties))))))
 
 (defun abstract-object-class-instance? (object)
   (typep object 'abstract-object))
@@ -93,7 +95,7 @@
 
 
 
-(labels ((destructively-cut-properties-from-plist (key-list plist)
+(labels ((destructively-cut-args-from-plist (key-list plist)
            (iterate:iter
              (for tail initially plist then (cddr tail))
              (while (cddr tail))
@@ -103,19 +105,28 @@
          (make-adjoined-properties-collection (object-class
                                                purpose custom-properties args
                                                functionality-modules)
-           (adjoin-properties
-            (cons custom-properties
-                  (mapcar
-                   #'(lambda (module)
-                       (multiple-value-bind (prop-constr-fn init-key-args)
-                           (funcall
-                            (functionality-module/properties-constructor-function-getter
-                             module) object-class purpose)
-                         (if prop-constr-fn
-                             (apply prop-constr-fn
-                                    (destructively-cut-properties-from-plist
-                                     init-key-args args)))))
-                   functionality-modules))))
+           (apply #'collect-properties
+                  (cons custom-properties
+                        (mapcar
+                         #'(lambda (module)
+                             (multiple-value-bind (property-construction-fn
+                                                   applicable-object-init-key-args
+                                                   constructed-properties-keys)
+                                 (funcall
+                                  (functionality-module/properties-constructor-function-getter
+                                   module) object-class purpose)
+                               (if property-construction-fn
+                                   (apply property-construction-fn
+                                          (alexandria:mappend
+                                           #'(lambda (key)
+                                               (let ((property (properties/get-property
+                                                                custom-properties key)))
+                                                 (if property
+                                                     (list key property))))
+                                           constructed-properties-keys)
+                                          (destructively-cut-args-from-plist
+                                           applicable-object-init-key-args args)))))
+                         functionality-modules))))
          (add-constraints-and-event-handlers! (object
                                                object-class custom-constraint-fn
                                                custom-event-handler functionality-modules)
@@ -146,7 +157,7 @@
                                       object-class custom-info-string-fn
                                       custom-info-string-fn-first info-string-fn-packages)
            (when (and custom-info-string-fn
-                      (not custom-info-string-fn-first))
+                    (not custom-info-string-fn-first))
              (function-collection/add-function!
               (object/info-string-function-collection object)
               nil nil custom-info-string-fn))
@@ -159,7 +170,7 @@
                     (object/info-string-function-collection object)
                     (info-string-function-package/name pckg) nil info-string-fn))))
            (when (and custom-info-string-fn
-                      custom-info-string-fn-first)
+                    custom-info-string-fn-first)
              (function-collection/add-function!
               (object/info-string-function-collection object)
               nil nil custom-info-string-fn))))
@@ -174,7 +185,7 @@
             (custom-event-handler (getf args :event-handler))
             (custom-info-string-fn (getf args :info-string-fn))
             (custom-info-string-fn-first (getf args :custom-info-string-fn-first))
-            (custom-properties (getf args :properties))
+            (custom-properties (collect-properties (getf args :properties)))
             (purpose (getf args :purpose +purpose/regular+))
             (args (nconc (list nil nil)
                          (alexandria:remove-from-plist
@@ -200,24 +211,24 @@
             object))))))
 
 (defun copy-abstract-object (object &optional args)
-  (apply (alexandria:curry #'make-instance (type-of object))
-         (nconc (if (null (getf args :purpose))
-                    (list :purpose (object/purpose object)))
-                (if (null (getf args :properties))
-                    (list :properties (copy-properties (object/properties object))))
-                (if (null (getf args :constraint-fn-collection))
-                    (list :constraint-fn-collection
-                          (copy-function-collection
-                           (object/constraint-function-collection object))))
-                (if (null (getf args :event-handler-collection))
-                    (list :event-handler-collection
-                          (copy-function-collection
-                           (object/event-handler-function-collection object))))
-                (if (null (getf args :info-string-fn-collection))
-                    (list :info-string-fn-collection
-                          (copy-function-collection
-                           (object/info-string-function-collection object))))
-                args)))
+  (make-object (type-of object)
+               (nconc (if (null (getf args :purpose))
+                          (list :purpose (object/purpose object)))
+                      (if (null (getf args :properties))
+                          (list :properties (copy-properties (object/properties object))))
+                      (if (null (getf args :constraint-fn-collection))
+                          (list :constraint-fn-collection
+                                (copy-function-collection
+                                 (object/constraint-function-collection object))))
+                      (if (null (getf args :event-handler-collection))
+                          (list :event-handler-collection
+                                (copy-function-collection
+                                 (object/event-handler-function-collection object))))
+                      (if (null (getf args :info-string-fn-collection))
+                          (list :info-string-fn-collection
+                                (copy-function-collection
+                                 (object/info-string-function-collection object))))
+                      args)))
 
 (defgeneric copy-object (object &rest args)
   (:documentation "Make a deep copy of an object"))
@@ -233,6 +244,6 @@
       (properties/set-property-value! (object/properties object) key new-value)
       (progn
         (setf (object/properties object)
-              (make-property-collection
-               (list (make-property key new-value))))
+           (make-property-collection
+            (list (make-property key new-value))))
         new-value)))

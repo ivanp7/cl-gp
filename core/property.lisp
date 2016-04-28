@@ -167,7 +167,8 @@
 
 (defun make-property (key value &rest args)
   (apply (alexandria:curry #'make-instance 'object/property
-                           :key key :value value) args))
+                           :key key :value value)
+         (alexandria:remove-from-plist args :key :value)))
 
 (defun copy-property (property)
   (make-property (property/key property)
@@ -256,6 +257,9 @@
   (if prop-collection
       (copy-list (~prop-collection/collection prop-collection))))
 
+(defun properties/property-present? (prop-collection key)
+  (not (null (properties/get-property prop-collection key))))
+
 (defun properties/get-property-value (prop-collection key &optional default-value)
   (let ((property (properties/get-property prop-collection key)))
     (if property
@@ -292,12 +296,18 @@
    (mapcar #'copy-property
            (~prop-collection/collection prop-collection))))
 
-(defun adjoin-properties (properties-list)
-  (make-property-collection
-   (reduce #'nconc
-           (delete nil (mapcar #'(lambda (object)
-                                 (if (object/property-collection? object)
-                                     (properties/get-list-of-properties object)
-                                     (alexandria:ensure-list object)))
-                             properties-list))
-           :from-end t)))
+(defun collect-properties (&rest properties)
+  (if (and (= 1 (length properties))
+         (object/property-collection? (first properties)))
+      (first properties)
+      (make-property-collection
+       (delete-duplicates
+        (reduce #'nconc
+                (delete nil (mapcar #'(lambda (object)
+                                      (if (object/property-collection? object)
+                                          (properties/get-list-of-properties object)
+                                          (alexandria:ensure-list object)))
+                                  properties))
+                :from-end t)
+        :test *property-key-test*
+        :key #'property/key))))

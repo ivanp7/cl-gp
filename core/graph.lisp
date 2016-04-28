@@ -58,12 +58,15 @@
 (defun ~edge-container/purpose-present? (container purpose)
   (not (null (assoc purpose container :test *purpose-test*))))
 
-(defun ~edge-container/connection-present? (container connection)
+(defun ~edge-container/find-connection (container connection)
   (let ((section (assoc (object/purpose connection) container
                         :test *purpose-test*)))
     (if section
-        (not (null (find connection (cdr section)
-                       :test #'connection-equal))))))
+        (find connection (cdr section)
+              :test #'connection-equal))))
+
+(defun ~edge-container/connection-present? (container connection)
+  (not (null (~edge-container/find-connection container connection))))
 
 (defun ~edge-container/add-connection-fn (container connection)
   (let ((section (assoc (object/purpose connection) container
@@ -81,8 +84,8 @@
     (if section
         (progn
           (setf (cdr section)
-                (delete connection (cdr section)
-                        :test #'connection-equal :count 1))
+             (delete connection (cdr section)
+                     :test #'connection-equal :count 1))
           (if (null (cdr section))
               (delete-if #'(lambda (sect)
                              (purpose-equal (car sect) purpose))
@@ -202,20 +205,21 @@
 
 (defun graph/add-node! (graph node &key node-constraint-fn
                                      node-event-handler-fn graph-event-handler-fn)
-  (if node
-      (let ((vertex (~graph/vertex graph (node/label node))))
-        (when (and (null vertex)
-                 (if node-constraint-fn
-                     (funcall node-constraint-fn node graph)
-                     (function-collection/call-all-functions
-                      (object/constraint-function-collection node)
-                      (list node graph))))
-          (cl-graph:add-vertex (~graph/container graph) node)
-          (~call-event-handlers node-event-handler-fn node :on-addition-to-graph
-                                :graph graph)
-          (~call-event-handlers graph-event-handler-fn graph :on-node-addition
-                                :node node)
-          t))))
+  (when (and node (object/purpose node) (null (object/owner node)))
+    (let ((vertex (~graph/vertex graph (node/label node))))
+      (when (and (null vertex)
+               (if node-constraint-fn
+                   (funcall node-constraint-fn node graph)
+                   (function-collection/call-all-functions
+                    (object/constraint-function-collection node)
+                    (list node graph))))
+        (cl-graph:add-vertex (~graph/container graph) node)
+        (setf (slot-value node 'owner) graph)
+        (~call-event-handlers node-event-handler-fn node :on-addition-to-graph
+                              :graph graph)
+        (~call-event-handlers graph-event-handler-fn graph :on-node-addition
+                              :node node)
+        t))))
 
 (defun graph/add-nodes! (graph nodes &key node-constraint-fn
                                        node-event-handler-fn graph-event-handler-fn)
@@ -279,6 +283,7 @@
                               :graph graph)
         (~call-event-handlers graph-event-handler-fn
                               graph :on-node-deletion :node (cl-graph:element vertex))
+        (setf (slot-value (cl-graph:element vertex) 'owner) nil)
         (cl-graph:delete-vertex (~graph/container graph) vertex)
         t))))
 
@@ -466,26 +471,27 @@
                                           node-event-handler-fn
                                           connection-event-handler-fn
                                           graph-event-handler-fn)
-  (when (object/purpose connection)
+  (when (and connection (object/purpose connection) (null (object/owner connection)))
     (multiple-value-bind (edge src-vertex tgt-vertex)
         (~graph/edge graph (connection/source-label connection)
                      (connection/target-label connection))
       (when (and (and src-vertex tgt-vertex)
-                 (if connection-constraint-fn
-                     (funcall connection-constraint-fn
-                              connection graph
-                              (cl-graph:element src-vertex)
-                              (cl-graph:element tgt-vertex))
-                     (function-collection/call-all-functions
-                      (object/constraint-function-collection connection)
-                      (list connection graph
+               (if connection-constraint-fn
+                   (funcall connection-constraint-fn
+                            connection graph
                             (cl-graph:element src-vertex)
-                            (cl-graph:element tgt-vertex)))))
+                            (cl-graph:element tgt-vertex))
+                   (function-collection/call-all-functions
+                    (object/constraint-function-collection connection)
+                    (list connection graph
+                          (cl-graph:element src-vertex)
+                          (cl-graph:element tgt-vertex)))))
         (if (null edge)
             (cl-graph:add-edge-between-vertexes
              (~graph/container graph) src-vertex tgt-vertex
              :value (~make-connections-container connection))
             (~edge-container/add-connection! (cl-graph:element edge) connection))
+        (setf (slot-value connection 'owner) graph)
         (~call-event-handlers node-event-handler-fn
                               (cl-graph:element src-vertex) :on-setting-of-connection
                               :connection connection
@@ -526,34 +532,37 @@
                                              graph-event-handler-fn)
   (let ((edge (~graph/edge graph (connection/source-label connection)
                            (connection/target-label connection))))
-    (when (and edge (~edge-container/connection-present?
-                     (cl-graph:element edge) connection))
+    (when edge
       (let ((src-vertex (cl-graph:source-vertex edge))
-            (tgt-vertex (cl-graph:target-vertex edge)))
-        (~call-event-handlers connection-event-handler-fn
-                              connection :on-deletion-from-graph
-                              :source (cl-graph:element src-vertex)
-                              :target (cl-graph:element tgt-vertex)
-                              :graph graph)
-        (~call-event-handlers node-event-handler-fn
-                              (cl-graph:element src-vertex) :on-loss-of-connection
-                              :connection connection
-                              :other-node (cl-graph:element tgt-vertex)
-                              :graph graph)
-        (~call-event-handlers node-event-handler-fn
-                              (cl-graph:element tgt-vertex) :on-loss-of-connection
-                              :connection connection
-                              :other-node (cl-graph:element src-vertex)
-                              :graph graph)
-        (~call-event-handlers graph-event-handler-fn
-                              graph :on-disconnection
-                              :connection connection
-                              :source (cl-graph:element src-vertex)
-                              :target (cl-graph:element tgt-vertex))
-        (~edge-container/delete-connection! (cl-graph:element edge) connection)
-        (if (~edge-container/empty? (cl-graph:element edge))
-            (cl-graph:delete-edge (~graph/container graph) edge))
-        t))))
+            (tgt-vertex (cl-graph:target-vertex edge))
+            (connection (~edge-container/find-connection
+                         (cl-graph:element edge) connection)))
+        (when connection
+          (~call-event-handlers connection-event-handler-fn
+                                connection :on-deletion-from-graph
+                                :source (cl-graph:element src-vertex)
+                                :target (cl-graph:element tgt-vertex)
+                                :graph graph)
+          (~call-event-handlers node-event-handler-fn
+                                (cl-graph:element src-vertex) :on-loss-of-connection
+                                :connection connection
+                                :other-node (cl-graph:element tgt-vertex)
+                                :graph graph)
+          (~call-event-handlers node-event-handler-fn
+                                (cl-graph:element tgt-vertex) :on-loss-of-connection
+                                :connection connection
+                                :other-node (cl-graph:element src-vertex)
+                                :graph graph)
+          (~call-event-handlers graph-event-handler-fn
+                                graph :on-disconnection
+                                :connection connection
+                                :source (cl-graph:element src-vertex)
+                                :target (cl-graph:element tgt-vertex))
+          (setf (slot-value connection 'owner) nil)
+          (~edge-container/delete-connection! (cl-graph:element edge) connection)
+          (if (~edge-container/empty? (cl-graph:element edge))
+              (cl-graph:delete-edge (~graph/container graph) edge))
+          t)))))
 
 (defun graph/disconnect-set! (graph connections &key node-event-handler-fn
                                                   connection-event-handler-fn
@@ -633,7 +642,7 @@
     (graph/connect-set! graph connections)
     graph))
 
-(defun graph/copy-graph (graph &optional args)
+(defun graph/copy-graph (graph &rest args)
   (let* ((nodes (mapcar #'copy-node (graph/all-nodes graph)))
          (connections (mapcar #'copy-connection (graph/all-connections graph)))
          (new-graph
@@ -647,7 +656,7 @@
     new-graph))
 
 (defmethod copy-object ((object object/graph) &rest args)
-  (graph/copy-graph object args))
+  (apply (alexandria:curry #'graph/copy-graph object) args))
 
 (defun graph/copy-subgraph (graph labels-list &rest args)
   (let* ((nodes (mapcar #'copy-node (graph/nodes graph labels-list)))

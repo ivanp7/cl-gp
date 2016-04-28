@@ -113,7 +113,7 @@
                             :target target-label)
                       (alexandria:delete-from-plist args :source :target))))
 
-(defun copy-connection (connection &optional args)
+(defun copy-connection (connection &rest args)
   (copy-abstract-object
    connection (nconc (if (null (getf args :source))
                          (list :source (connection/source-label connection)))
@@ -127,7 +127,7 @@
                      args)))
 
 (defmethod copy-object ((object object/connection) &rest args)
-  (copy-connection object args))
+  (apply (alexandria:curry #'copy-connection object) args))
 
 (defun connection-equal (conn1 conn2)
   (and (purpose-equal (object/purpose conn1)

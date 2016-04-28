@@ -27,15 +27,15 @@
 
 (define-description-string-method (object/node 'node)
   (let ((*print-circle* nil))
-    (with-slots (label) object
-      (format nil "[~S]" label))))
+    (with-slots (label groups) object
+      (format nil "[~S] @~:S" label groups))))
 
 (defun make-node (label &rest args)
   (make-object 'object/node
                (nconc (list :label label)
                       (alexandria:delete-from-plist args :label))))
 
-(defun copy-node (node &optional args)
+(defun copy-node (node &rest args)
   (copy-abstract-object
    node (nconc (if (null (getf args :label))
                    (list :label (node/label node)))
@@ -44,4 +44,4 @@
                args)))
 
 (defmethod copy-object ((object object/node) &rest args)
-  (copy-node object args))
+  (apply (alexandria:curry #'copy-node object) args))

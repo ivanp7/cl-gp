@@ -129,128 +129,162 @@
 ;;; ******************
 
 (defparameter *strong-typing-enabled* t)
-(defparameter *strong-typing-allow-data-loss* nil)
+(defparameter *strong-typing-allow-lossy-connections* nil)
 
 (defparameter *strong-typing-constraint*
   (make-functionality-module
    :name 'strong-typing
-   :constraint-connection-test-fn
-   #'(lambda (source-node target-node connection graph)
-       (declare (ignore graph))
-       (or (not *strong-typing-enabled*)
-          (let ((source-entity (type/recursive-component-type-selection
-                                (object/output-type source-node)
-                                (arrow/source-selector (connection/arrow connection))))
-                (target-entity (type/recursive-component-type-selection
-                                (object/input-type target-node)
-                                (arrow/target-selector (connection/arrow connection)))))
-            (let ((result (type-entity/reducible? source-entity target-entity)))
-              (cond
-                ((not result) nil)
-                ((eql result :loss) *strong-typing-allow-data-loss*)
-                ((eql result t) t)
-                (t t))))))
+   :dependencies (list *reference-functionality*)
+   :constraint-fn-getter
+   #'(lambda (object-class object)
+       (declare (ignore object))
+       (if (eql object-class 'object/connection)
+           #'(lambda (connection graph source-node target-node)
+               (declare (ignore graph))
+               (or (not *strong-typing-enabled*)
+                  (let ((source-type-entity
+                         (type/recursive-component-type-selection
+                          (object/output-type source-node)
+                          (arrow/source-selector (connection/arrow connection))))
+                        (target-type-entity
+                         (type/recursive-component-type-selection
+                          (object/input-type target-node)
+                          (arrow/target-selector (connection/arrow connection)))))
+                    (let ((result (type-entity/reducible? source-type-entity
+                                                          target-type-entity)))
+                      (cond
+                        ((not result) nil)
+                        ((eql result :loss) *strong-typing-allow-lossy-connections*)
+                        ((eql result t) t)
+                        (t t))))))))
    :event-handler-fn-getter
-   #'(lambda (kind)
-       (alexandria:switch (kind :test #'kind-equal)
-         (+kind/node+
-          #'(lambda (node event &rest args)
-              (let ((connection (getf args :connection))
-                    (graph (getf args :graph)))
-                (case event
-                  (:on-initialization
-                   (let ((input-type (object/input-type node))
-                         (output-type (object/output-type node)))
-                     (dolist (constr (object/internal-type-variable-constraints
-                                      node))
-                       (cps-constraint/establish constr input-type output-type))))
-                  (:on-addition-to-graph
-                   (when (node/reference-master-source? node)
-                     (let ((node-input-type-property
-                            (properties/get-property
-                             (object/properties node) :input-type))
-                           (node-output-type-property
-                            (properties/get-property
-                             (object/properties node) :output-type))
-                           (graph-input-type-property
-                            (properties/get-property
-                             (object/properties graph) :input-type))
-                           (graph-output-type-property
-                            (properties/get-property
-                             (object/properties graph) :output-type)))
-                       (property/register-value-setting-event-function!
-                        node-input-type-property 'strong-typing nil
-                        #'(lambda (value)
-                            (setf (property/value graph-output-type-property)
-                               value))
-                        (property/value node-input-type-property))
-                       (property/register-value-setting-event-function!
-                        node-output-type-property 'strong-typing nil
-                        #'(lambda (value)
-                            (setf (property/value graph-input-type-property)
-                               value))
-                        (property/value node-output-type-property)))))
-                  (:on-deletion-from-graph
-                   #|FIIIIIIX|# nil)
-                  (:on-setting-of-connection
-                   #|FIIIIIIX|# nil)
-                  (:on-loss-of-connection
-                   #|FIIIIIIX|# nil)))))
-         (+kind/connection+
-          #'(lambda (connection event &rest args)
-              (case event
-                (:on-addition-to-graph
-                 #|FIIIIIIX|# nil)
-                (:on-deletion-from-graph
-                 #|FIIIIIIX|# nil))))
-         (t (constantly nil))))
-   :init-args-getter
-   #'(lambda (kind)
-       (if (kind-equal kind +kind/node+)
-           '(:input-type :output-type :internal-type-variable-constraints)))
+   #'(lambda (object-class object)
+       )
    :properties-constr-fn-getter
-   #'(lambda (kind)
-       (alexandria:switch (kind :test #'kind-equal)
-         (+kind/node+
-          #'(lambda (&key (input-type (bottom-type)) (output-type (bottom-type))
-                  internal-type-variable-constraints-list)
-              (make-property-collection
-               (list (make-property :input-type input-type
-                                    :value-copy-fn #'copy-type-entity)
-                     (make-property :output-type output-type
-                                    :value-copy-fn #'copy-type-entity)
-                     (make-property :internal-type-variable-constraints
-                                    (copy-list internal-type-variable-constraints-list)
-                                    :value-copy-fn #'(lambda (constraints)
-                                                       (mapcar #'copy-cps-constraint
-                                                               constraints)))))))
-         (+kind/connection+
-          #'(lambda ()
-              (make-property-collection
-               (list (make-property :input-type (bottom-type)
-                                    :value-copy-fn (constantly (bottom-type)))
-                     (make-property :output-type (bottom-type)
-                                    :value-copy-fn (constantly (bottom-type)))
-                     (make-property :internal-type-variable-constraints
-                                    nil
-                                    :value-copy-fn (constantly nil))))))
-         (+kind/graph+
-          #'(lambda ()
-              (make-property-collection
-               (list (make-property :input-type (bottom-type)
-                                    :value-copy-fn (constantly (bottom-type)))
-                     (make-property :output-type (bottom-type)
-                                    :value-copy-fn (constantly (bottom-type)))))))
-         (t (constantly nil))))))
+   #'(lambda (object-class purpose)
+       (let ((type-settable-p (and (eql object-class 'object/node)
+                                 (not (purpose-equal purpose +purpose/reference-target+)))))
+         (values #'(lambda (present-properties
+                       &key (input-type (bottom-type) input-type-supplied-p)
+                         (output-type (bottom-type) output-type-supplied-p)
+                         (internal-type-variable-constraints
+                          nil internal-constraints-supplied-p))
+                     (nconc
+                      (let ((input-type-property (getf present-properties :input-type)))
+                        (if (null input-type-property)
+                            (list (make-property :input-type input-type
+                                                 :value-copy-fn
+                                                 (if type-settable-p
+                                                     #'copy-type-entity
+                                                     (constantly (bottom-type)))
+                                                 :value-setting-fn
+                                                 (if type-settable-p
+                                                     +property/writable+
+                                                     +property/read-only+)))
+                            (when input-type-supplied-p
+                              (setf (property/value input-type-property) input-type)
+                              nil)))
+                      (let ((output-type-property (getf present-properties :output-type)))
+                        (if (null output-type-property)
+                            (list (make-property :output-type output-type
+                                                 :value-copy-fn
+                                                 (if type-settable-p
+                                                     #'copy-type-entity
+                                                     (constantly (bottom-type)))
+                                                 :value-setting-fn
+                                                 (if type-settable-p
+                                                     +property/writable+
+                                                     +property/read-only+)))
+                            (when output-type-supplied-p
+                              (setf (property/value output-type-property) output-type)
+                              nil)))
+                      (let ((internal-constraints-property
+                             (getf present-properties :internal-type-variable-constraints)))
+                        (if (null internal-constraints-property)
+                            (make-property :internal-type-variable-constraints
+                                           (copy-list internal-type-variable-constraints)
+                                           :value-copy-fn
+                                           (if type-settable-p
+                                               #'(lambda (constr-list)
+                                                   (mapcar #'copy-cps-constraint
+                                                           constr-list))
+                                               (constantly nil))
+                                           :value-setting-fn
+                                           (if type-settable-p
+                                               +property/writable+
+                                               +property/read-only+))
+                            (when internal-constraints-supplied-p
+                              (setf (property/value internal-constraints-property)
+                                 (copy-list internal-type-variable-constraints))
+                              nil)))))
+                 (if type-settable-p
+                     '(:input-type :output-type :internal-type-variable-constraints))
+                 '(:input-type :output-type :internal-type-variable-constraints))))))
 
 (defparameter *type-info-string-function-package*
-  (make-functionality-info-string-function-package
+  (make-info-string-function-package
    :name :type
    :info-string-fn-getter
-   #'(lambda (kind)
-       (declare (ignore kind))
+   #'(lambda (object-class object)
+       (declare (ignore object-class object))
        #'(lambda (object)
            (let ((*print-circle* nil))
-             (format nil "{TYPE: ~A -> ~A}"
+             (format nil "TYPE: ~A -> ~A"
                      (type-entity/description-string (object/input-type object))
                      (type-entity/description-string (object/output-type object))))))))
+
+#|
+#'(lambda (kind)
+(alexandria:switch (kind :test #'kind-equal)
+  (+kind/node+
+   #'(lambda (node event &rest args)
+       (let ((connection (getf args :connection))
+             (graph (getf args :graph)))
+         (case event
+           (:on-initialization
+            (let ((input-type (object/input-type node))
+                  (output-type (object/output-type node)))
+              (dolist (constr (object/internal-type-variable-constraints
+                               node))
+                (cps-constraint/establish constr input-type output-type))))
+           (:on-addition-to-graph
+            (when (node/reference-master-source? node)
+              (let ((node-input-type-property
+                     (properties/get-property
+                      (object/properties node) :input-type))
+                    (node-output-type-property
+                     (properties/get-property
+                      (object/properties node) :output-type))
+                    (graph-input-type-property
+                     (properties/get-property
+                      (object/properties graph) :input-type))
+                    (graph-output-type-property
+                     (properties/get-property
+                      (object/properties graph) :output-type)))
+                (property/register-value-setting-event-function!
+                 node-input-type-property 'strong-typing nil
+                 #'(lambda (value)
+                     (setf (property/value graph-output-type-property)
+                           value))
+                 (property/value node-input-type-property))
+                (property/register-value-setting-event-function!
+                 node-output-type-property 'strong-typing nil
+                 #'(lambda (value)
+                     (setf (property/value graph-input-type-property)
+                           value))
+                 (property/value node-output-type-property)))))
+           (:on-deletion-from-graph
+            #|FIIIIIIX|# nil)
+           (:on-setting-of-connection
+            #|FIIIIIIX|# nil)
+           (:on-loss-of-connection
+            #|FIIIIIIX|# nil)))))
+  (+kind/connection+
+   #'(lambda (connection event &rest args)
+       (case event
+         (:on-addition-to-graph
+          #|FIIIIIIX|# nil)
+         (:on-deletion-from-graph
+          #|FIIIIIIX|# nil))))
+  (t (constantly nil))))
+|#

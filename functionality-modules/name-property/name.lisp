@@ -40,9 +40,7 @@
   (defparameter *name-functionality*
     (make-functionality-module
      :name 'name-functionality
-     :dependencies-register-fn
-     #'(lambda ()
-         (register-functionality-module! *reference-functionality*))
+     :dependencies (list *reference-functionality*)
      :event-handler-fn-getter
      #'(lambda (object-class object)
          (declare (ignore object))
@@ -66,17 +64,27 @@
      #'(lambda (object-class purpose)
          (if (or (eql object-class 'object/node)
                 (eql object-class 'object/graph))
-             (let ((name-not-writable
-                    (or (eql object-class 'object/graph)
-                       (purpose-equal purpose +purpose/reference-target+))))
-               (values #'(lambda (&key name)
-                           (make-property :name name
-                                          :value-setting-fn
-                                          (if name-not-writable
-                                              +property/read-only+
-                                              +property/writable+)))
-                       (unless name-not-writable
-                         '(:name)))))))))
+             (let ((name-settable-p
+                    (and (eql object-class 'object/node)
+                       (not (purpose-equal purpose +purpose/reference-target+)))))
+               (values #'(lambda (present-properties &key (name nil name-supplied-p))
+                           (let ((name-property (getf present-properties :name)))
+                             (if (null name-property)
+                                 (make-property :name name
+                                                :value-copy-fn
+                                                (if name-settable-p
+                                                    #'identity
+                                                    (constantly nil))
+                                                :value-setting-fn
+                                                (if name-settable-p
+                                                    +property/writable+
+                                                    +property/read-only+))
+                                 (when name-supplied-p
+                                   (setf (property/value name-property) name)
+                                   nil))))
+                       (if name-settable-p
+                           '(:name))
+                       '(:name))))))))
 
 (defparameter *name-info-string-function-package*
   (make-info-string-function-package
