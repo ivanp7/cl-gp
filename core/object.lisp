@@ -36,15 +36,14 @@
                               :initform
                               (make-function-collection
                                #'(lambda (fn-list &optional args)
-                                   (if (null fn-list)
-                                       ""
-                                       (reduce #'(lambda (str1 str2)
-                                                   (concatenate 'string str1 " " str2))
-                                               (mapcar
-                                                #'(lambda (fn)
+                                   (alexandria:mappend
+                                    #'(lambda (fn)
+                                        (mapcar #'(lambda (str)
                                                     (concatenate 'string
-                                                                 "{" (apply fn args) "}"))
-                                                fn-list))))))))
+                                                                 "{" str "}"))
+                                                (alexandria:ensure-list
+                                                 (apply fn args))))
+                                    fn-list))))))
 
 (defmethod initialize-instance :after ((instance abstract-object) &key)
   (with-slots (properties) instance
@@ -54,44 +53,32 @@
 (defun abstract-object-class-instance? (object)
   (typep object 'abstract-object))
 
-(defgeneric object/description-string (object &key no-object-class-name)
+(defgeneric object/description-strings (object &key no-object-class-name)
   (:documentation "Generate description string for printing purposes"))
 
 (defmacro define-description-string-method ((object-class &optional object-class-name)
                                             &body body)
-  `(defmethod object/description-string ((object ,object-class) &key no-object-class-name)
-     (let ((descr (with-slots (purpose info-string-fn-collection) object
-                    (let* ((kind-specific-info (progn ,@body))
-                           (extra-info (function-collection/call-all-functions
-                                        info-string-fn-collection
-                                        (list object)))
-                           (info (cond
-                                   ((and (plusp (length kind-specific-info))
-                                       (plusp (length extra-info)))
-                                    (concatenate 'string kind-specific-info " " extra-info))
-                                   ((plusp (length kind-specific-info))
-                                    kind-specific-info)
-                                   ((plusp (length extra-info))
-                                    extra-info)
-                                   (t ""))))
-                      (let ((*print-circle* nil))
-                        (if (plusp (length info))
-                            (format nil "~S ~A" purpose info)
-                            (format nil "~S" purpose)))))))
-       (if (not no-object-class-name)
-           (let ((*print-circle* nil)
-                 (obj-class (if (null ,object-class-name)
-                                (type-of object)
-                                ,object-class-name)))
-             (if (plusp (length descr))
-                 (format nil "~S:~A" obj-class descr)
-                 (format nil "~S" obj-class)))
-           descr))))
+  `(defmethod object/description-strings ((object ,object-class) &key no-object-class-name)
+     (with-slots (purpose info-string-fn-collection) object
+       (let ((class-specific-info (progn ,@body))
+             (extra-info (function-collection/call-all-functions
+                          info-string-fn-collection
+                          (list object))))
+         (nconc (let ((*print-circle* nil))
+                  (list (if (not no-object-class-name)
+                            (let ((obj-class (if (null ,object-class-name)
+                                                 (type-of object)
+                                                 ,object-class-name)))
+                              (format nil "~S:~S" obj-class purpose))
+                            (format nil "~S" purpose))))
+                (if (plusp (length class-specific-info))
+                    (list class-specific-info))
+                extra-info)))))
 
 (defmethod print-object ((instance abstract-object) st)
   (print-unreadable-object (instance st)
-    (let ((*print-circle* nil))
-      (format st (object/description-string instance)))))
+    (let ((str (format nil "~:A" (object/description-strings instance))))
+      (format st "~A" (subseq str 1 (1- (length str)))))))
 
 
 
@@ -244,6 +231,6 @@
       (properties/set-property-value! (object/properties object) key new-value)
       (progn
         (setf (object/properties object)
-           (make-property-collection
-            (list (make-property key new-value))))
+              (make-property-collection
+               (list (make-property key new-value))))
         new-value)))

@@ -587,11 +587,11 @@
                                            &key no-class-name)
   (let ((*print-circle* nil))
     (let ((descr (with-slots (name type-class) entity
-                   (format nil "~S: (~A)" name
+                   (format nil "~S: ~A" name
                            (type-class/description-string type-class)))))
       (if (not no-class-name)
-          (concatenate 'string "TYPE-VARIABLE " descr)
-          descr))))
+          (concatenate 'string "{TYPE-VARIABLE " descr "}")
+          (concatenate 'string "{" descr "}")))))
 
 (defun make-type-variable (name &optional (type-class-object (top-type-class)) &rest args)
   (apply (alexandria:curry #'make-instance 'object/type-variable

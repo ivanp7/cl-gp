@@ -19,11 +19,11 @@
              (property/force-value! target-name-property value))
             t (list (property/value node-name-property)))))
        (unbind-target-name! (node target)
-         (let* ((node-name-property (properties/get-property
-                                     (object/properties node) :name)))
+         (let ((node-name-property (properties/get-property
+                                    (object/properties node) :name)))
            (function-collection/call-function
             (property/value-setting-event-handler-collection node-name-property)
-            'name-functionality target nil)
+            'name-functionality target (list nil))
            (function-collection/delete-function!
             (property/value-setting-event-handler-collection node-name-property)
             'name-functionality target)))

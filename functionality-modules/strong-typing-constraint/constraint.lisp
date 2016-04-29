@@ -107,6 +107,23 @@
 (defmethod copy-cps-constraint ((cps-constraint cps-constraint/node))
   (copy-node-internal-type-variable-constraint cps-constraint))
 
+;;; *** internal constraint collection ***
+
+(defclass internal-type-variable-constraint-collection ()
+  ((collection :initarg :collection
+               :initform nil)))
+
+(defun internal-constraint-collection/constraints (collection)
+  (copy-list (slot-value collection 'collection)))
+
+(defun make-internal-type-variable-constraint-collection (constraints)
+  (make-instance 'internal-type-variable-constraint-collection
+                 :collection (copy-list constraints)))
+
+(defun copy-internal-constraint-collection (collection)
+  (make-internal-type-variable-constraint-collection
+   (internal-constraint-collection/constraints collection)))
+
 ;;; *** object property readers ***
 
 (defun object/input-type (object)
@@ -121,8 +138,8 @@
     ((direction/output? direction) (object/output-type object))
     (t (error "OBJECT/TYPE -- incorrect direction ~S is supplied" direction))))
 
-(defun object/internal-type-variable-constraints (object)
-  (object/get-property-value object :internal-type-variable-constraints))
+(defun object/internal-type-variable-constraint-collection (object)
+  (object/get-property-value object :internal-constraint-collection))
 
 ;;; ******************
 ;;; *** constraint ***
@@ -131,95 +148,191 @@
 (defparameter *strong-typing-enabled* t)
 (defparameter *strong-typing-allow-lossy-connections* nil)
 
-(defparameter *strong-typing-constraint*
-  (make-functionality-module
-   :name 'strong-typing
-   :dependencies (list *reference-functionality*)
-   :constraint-fn-getter
-   #'(lambda (object-class object)
-       (declare (ignore object))
-       (if (eql object-class 'object/connection)
-           #'(lambda (connection graph source-node target-node)
-               (declare (ignore graph))
-               (or (not *strong-typing-enabled*)
-                  (let ((source-type-entity
-                         (type/recursive-component-type-selection
-                          (object/output-type source-node)
-                          (arrow/source-selector (connection/arrow connection))))
-                        (target-type-entity
-                         (type/recursive-component-type-selection
-                          (object/input-type target-node)
-                          (arrow/target-selector (connection/arrow connection)))))
-                    (let ((result (type-entity/reducible? source-type-entity
-                                                          target-type-entity)))
-                      (cond
-                        ((not result) nil)
-                        ((eql result :loss) *strong-typing-allow-lossy-connections*)
-                        ((eql result t) t)
-                        (t t))))))))
-   :event-handler-fn-getter
-   #'(lambda (object-class object)
-       )
-   :properties-constr-fn-getter
-   #'(lambda (object-class purpose)
-       (let ((type-settable-p (and (eql object-class 'object/node)
-                                 (not (purpose-equal purpose +purpose/reference-target+)))))
-         (values #'(lambda (present-properties
-                       &key (input-type (bottom-type) input-type-supplied-p)
-                         (output-type (bottom-type) output-type-supplied-p)
-                         (internal-type-variable-constraints
-                          nil internal-constraints-supplied-p))
-                     (nconc
-                      (let ((input-type-property (getf present-properties :input-type)))
-                        (if (null input-type-property)
-                            (list (make-property :input-type input-type
-                                                 :value-copy-fn
-                                                 (if type-settable-p
-                                                     #'copy-type-entity
-                                                     (constantly (bottom-type)))
-                                                 :value-setting-fn
-                                                 (if type-settable-p
-                                                     +property/writable+
-                                                     +property/read-only+)))
-                            (when input-type-supplied-p
-                              (setf (property/value input-type-property) input-type)
-                              nil)))
-                      (let ((output-type-property (getf present-properties :output-type)))
-                        (if (null output-type-property)
-                            (list (make-property :output-type output-type
-                                                 :value-copy-fn
-                                                 (if type-settable-p
-                                                     #'copy-type-entity
-                                                     (constantly (bottom-type)))
-                                                 :value-setting-fn
-                                                 (if type-settable-p
-                                                     +property/writable+
-                                                     +property/read-only+)))
-                            (when output-type-supplied-p
-                              (setf (property/value output-type-property) output-type)
-                              nil)))
-                      (let ((internal-constraints-property
-                             (getf present-properties :internal-type-variable-constraints)))
-                        (if (null internal-constraints-property)
-                            (make-property :internal-type-variable-constraints
-                                           (copy-list internal-type-variable-constraints)
-                                           :value-copy-fn
-                                           (if type-settable-p
-                                               #'(lambda (constr-list)
-                                                   (mapcar #'copy-cps-constraint
-                                                           constr-list))
-                                               (constantly nil))
-                                           :value-setting-fn
-                                           (if type-settable-p
-                                               +property/writable+
-                                               +property/read-only+))
-                            (when internal-constraints-supplied-p
-                              (setf (property/value internal-constraints-property)
-                                 (copy-list internal-type-variable-constraints))
-                              nil)))))
-                 (if type-settable-p
-                     '(:input-type :output-type :internal-type-variable-constraints))
-                 '(:input-type :output-type :internal-type-variable-constraints))))))
+(flet ((bind-target-types! (node target)
+         (let ((node-input-type-property (properties/get-property
+                                          (object/properties node) :input-type))
+               (node-output-type-property (properties/get-property
+                                           (object/properties node) :output-type))
+               (target-input-type-property (properties/get-property
+                                            (object/properties target) :input-type))
+               (target-output-type-property (properties/get-property
+                                             (object/properties target) :output-type)))
+           (function-collection/add-function!
+            (property/value-setting-event-handler-collection node-input-type-property)
+            'strong-typing-functionality target
+            #'(lambda (value)
+             (property/force-value! target-input-type-property value))
+            t (list (property/value node-input-type-property)))
+           (function-collection/add-function!
+            (property/value-setting-event-handler-collection node-output-type-property)
+            'strong-typing-functionality target
+            #'(lambda (value)
+             (property/force-value! target-output-type-property value))
+            t (list (property/value node-output-type-property)))))
+       (unbind-target-types! (node target)
+         (let ((node-input-type-property (properties/get-property
+                                          (object/properties node) :input-type))
+               (node-output-type-property (properties/get-property
+                                           (object/properties node) :output-type)))
+           (function-collection/call-function
+            (property/value-setting-event-handler-collection node-input-type-property)
+            'strong-typing-functionality target (list (bottom-type)))
+           (function-collection/call-function
+            (property/value-setting-event-handler-collection node-output-type-property)
+            'strong-typing-functionality target (list (bottom-type)))
+           (function-collection/delete-function!
+            (property/value-setting-event-handler-collection node-input-type-property)
+            'strong-typing-functionality target)
+           (function-collection/delete-function!
+            (property/value-setting-event-handler-collection node-output-type-property)
+            'strong-typing-functionality target)))
+       (unbind-all-bound-types! (node)
+         (let ((node-input-type-property (properties/get-property
+                                          (object/properties node) :input-type))
+               (node-output-type-property (properties/get-property
+                                           (object/properties node) :output-type)))
+           (function-collection/call-functions
+            (property/value-setting-event-handler-collection node-input-type-property)
+            'strong-typing-functionality (list nil))
+           (function-collection/call-functions
+            (property/value-setting-event-handler-collection node-output-type-property)
+            'strong-typing-functionality (list nil))
+           (function-collection/delete-functions!
+            (property/value-setting-event-handler-collection node-input-type-property)
+            'node-input-type-property)
+           (function-collection/delete-functions!
+            (property/value-setting-event-handler-collection node-output-type-property)
+            'node-input-type-property))))
+
+  (defparameter *strong-typing-constraint*
+    (make-functionality-module
+     :name 'strong-typing
+     :dependencies (list *reference-functionality*)
+     :constraint-fn-getter
+     #'(lambda (object-class object)
+         (declare (ignore object))
+         (if (eql object-class 'object/connection)
+             #'(lambda (connection graph source-node target-node)
+                 (declare (ignore graph))
+                 (or (not *strong-typing-enabled*)
+                    (let ((source-type-entity
+                           (type/recursive-component-type-selection
+                            (object/output-type source-node)
+                            (arrow/source-selector (connection/arrow connection))))
+                          (target-type-entity
+                           (type/recursive-component-type-selection
+                            (object/input-type target-node)
+                            (arrow/target-selector (connection/arrow connection)))))
+                      (let ((result (type-entity/reducible? source-type-entity
+                                                            target-type-entity)))
+                        (cond
+                          ((not result) nil)
+                          ((eql result :loss) *strong-typing-allow-lossy-connections*)
+                          ((eql result t) t)
+                          (t t))))))))
+     :event-handler-fn-getter
+     #'(lambda (object-class object)
+         (declare (ignore object))
+         (if (eql object-class 'object/node)
+             #'(lambda (node event &key connection other-node graph)
+                 (case event
+                   (:on-initialization
+                    (let ((internal-constraint-collection
+                           (object/internal-type-variable-constraint-collection
+                            node)))
+                      (if internal-constraint-collection
+                          (let ((input-type (object/input-type node))
+                                (output-type (object/output-type node)))
+                            (dolist (constr (internal-constraint-collection/constraints
+                                             internal-constraint-collection))
+                              (cps-constraint/establish constr
+                                                        :input-type input-type
+                                                        :output-type output-type))))))
+                   (:on-addition-to-graph
+                    (when (node/reference-master-source? node)
+                      (bind-target-types! node graph)))
+                   (:on-deletion-from-graph
+                    (unbind-all-bound-types! node))
+                   (:on-setting-of-connection
+                    (when (and (node/reference-source? node)
+                             (connection/reference? connection))
+                      (bind-target-types! node other-node)))
+                   (:on-loss-of-connection
+                    (when (and (node/reference-source? node)
+                             (connection/reference? connection))
+                      (unbind-target-types! node other-node)))))))
+     :properties-constr-fn-getter
+     #'(lambda (object-class purpose)
+         (let ((type-settable-p (and (eql object-class 'object/node)
+                                   (not (purpose-equal purpose +purpose/reference-target+)))))
+           (values #'(lambda (present-properties
+                         &key (input-type
+                               (if (and (eql object-class 'object/node)
+                                      (or (purpose-equal purpose
+                                                        +purpose/reference-source+)
+                                         (purpose-equal purpose
+                                                        +purpose/reference-master-source+)))
+                                   (make-type-variable 'input)
+                                   (bottom-type)) input-type-supplied-p)
+                           (output-type
+                            (if (and (eql object-class 'object/node)
+                                   (or (purpose-equal purpose
+                                                     +purpose/reference-source+)
+                                      (purpose-equal purpose
+                                                     +purpose/reference-master-source+)))
+                                (make-type-variable 'output)
+                                (bottom-type)) output-type-supplied-p)
+                           (internal-constraint-collection
+                            nil internal-constraints-supplied-p))
+                       (nconc
+                        (let ((input-type-property (getf present-properties :input-type)))
+                          (if (null input-type-property)
+                              (list (make-property :input-type input-type
+                                                   :value-copy-fn
+                                                   (if type-settable-p
+                                                       #'copy-type-entity
+                                                       (constantly (bottom-type)))
+                                                   :value-setting-fn
+                                                   (if type-settable-p
+                                                       +property/writable+
+                                                       +property/read-only+)))
+                              (when input-type-supplied-p
+                                (setf (property/value input-type-property) input-type)
+                                nil)))
+                        (let ((output-type-property (getf present-properties :output-type)))
+                          (if (null output-type-property)
+                              (list (make-property :output-type output-type
+                                                   :value-copy-fn
+                                                   (if type-settable-p
+                                                       #'copy-type-entity
+                                                       (constantly (bottom-type)))
+                                                   :value-setting-fn
+                                                   (if type-settable-p
+                                                       +property/writable+
+                                                       +property/read-only+)))
+                              (when output-type-supplied-p
+                                (setf (property/value output-type-property) output-type)
+                                nil)))
+                        (let ((internal-constraints-property
+                               (getf present-properties :internal-constraint-collection)))
+                          (if (null internal-constraints-property)
+                              (make-property :internal-constraint-collection
+                                             internal-constraint-collection
+                                             :value-copy-fn
+                                             (if type-settable-p
+                                                 #'copy-internal-constraint-collection
+                                                 (constantly nil))
+                                             :value-setting-fn
+                                             (if type-settable-p
+                                                 +property/writable+
+                                                 +property/read-only+))
+                              (when internal-constraints-supplied-p
+                                (setf (property/value internal-constraints-property)
+                                   internal-constraint-collection)
+                                nil)))))
+                   (if type-settable-p
+                       '(:input-type :output-type :internal-constraint-collection))
+                   '(:input-type :output-type :internal-constraint-collection)))))))
 
 (defparameter *type-info-string-function-package*
   (make-info-string-function-package
@@ -229,9 +342,12 @@
        (declare (ignore object-class object))
        #'(lambda (object)
            (let ((*print-circle* nil))
-             (format nil "TYPE: ~A -> ~A"
-                     (type-entity/description-string (object/input-type object))
-                     (type-entity/description-string (object/output-type object))))))))
+             (list (concatenate 'string "INPUT-TYPE: "
+                                (type-entity/description-string
+                                 (object/input-type object)))
+                   (concatenate 'string "OUTPUT-TYPE: "
+                                (type-entity/description-string
+                                 (object/output-type object)))))))))
 
 #|
 #'(lambda (kind)
