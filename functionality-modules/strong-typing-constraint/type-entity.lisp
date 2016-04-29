@@ -92,14 +92,14 @@
         ((eql result2 t) result2)
         (t :loss)))
 
-(defun type/recursive-component-type-selection (entity selector)
-  (if (null selector)
+(defun type/recursive-component-type-selection (entity selector-tags)
+  (if (null selector-tags)
       (type-entity/actual-entity entity)
       (type/recursive-component-type-selection
        (type-entity/component-type
         (type-entity/actual-entity entity)
-        (first selector))
-       (rest selector))))
+        (first selector-tags))
+       (rest selector-tags))))
 
 ;;; *** abstract type ***
 ;;; *********************
@@ -294,7 +294,7 @@
                                     :key #'field/name)))
       (make-data-type 'object/record
                       (nconc (list :fields fields-list)
-                             (alexandria:remove-from-plist args :fields)))
+                             (alexandria:delete-from-plist args :fields)))
       (error "MAKE-RECORD -- record cannot have fields with identical names")))
 
 (defun unit-type ()
@@ -411,7 +411,7 @@
   (make-data-type 'object/function-type
                   (nconc (list :argument argument-type
                                :result result-type)
-                         (alexandria:remove-from-plist args :argument :result))))
+                         (alexandria:delete-from-plist args :argument :result))))
 
 (defun copy-function-type (entity &optional args)
   (copy-abstract-data-type
@@ -473,7 +473,7 @@
 (defun make-parametric-type (name parameters-record &rest args)
   (make-data-type 'object/parametric-type
                   (nconc (list :name name :parameter parameters-record)
-                         (alexandria:remove-from-plist args :name :parameter))))
+                         (alexandria:delete-from-plist args :name :parameter))))
 
 (defun make-primitive-type (name &rest args)
   (apply (alexandria:curry #'make-parametric-type name (unit-type)) args))
@@ -518,56 +518,69 @@
   ((name :reader type-class/name
          :initarg :name
          :initform (error "TYPE-CLASS -- :name parameter must be supplied"))
-   (properties :accessor type-class/properties
-               :initarg :properties
-               :initform nil)
    (reducibility-test-fn :accessor type-class/reducibility-test-function
                          :initarg :reducibility-test-fn
                          :initform (constantly nil))
    (class-reducibility-test-fn :accessor type-class/class-reducibility-test-function
                                :initarg :class-reducibility-test-fn
-                               :initform (constantly nil))))
+                               :initform (constantly nil))
+   (properties :accessor type-class/properties
+               :initarg :properties
+               :initform nil)))
 
-(defun type-class/description-string (type-class)
+(defgeneric type-class/description-string (type-class)
+  (:documentation "Generate description string for printing purposes"))
+
+(defmethod type-class/description-string ((type-class object/type-class))
   (with-slots (name) type-class
     (let ((*print-circle* nil))
-      (format nil "TYPE-CLASS ~S" name))))
+      (format nil "{TYPE-CLASS ~S}" name))))
 
 (defmethod print-object ((instance object/type-class) st)
   (print-unreadable-object (instance st)
     (format st "~A" (type-class/description-string instance))))
 
-(defun make-type-class (name reducibility-test-fn class-reducibility-test-fn &key properties)
+(defun make-type-class (name reducibility-test-fn class-reducibility-test-fn
+                        &optional properties)
   (make-instance 'object/type-class
                  :name name
-                 :properties properties
                  :reducibility-test-fn reducibility-test-fn
-                 :class-reducibility-test-fn class-reducibility-test-fn))
+                 :class-reducibility-test-fn class-reducibility-test-fn
+                 :properties properties))
 
 (defun copy-type-class (type-class)
   (make-type-class (type-class/name type-class)
                    (type-class/reducibility-test-function type-class)
                    (type-class/class-reducibility-test-function type-class)
-                   :properties (copy-properties (type-class/properties type-class))))
+                   (copy-properties (type-class/properties type-class))))
+
+;;; *** top type class ***
+
+(declaim (ftype function type-class/top-class?))
+
+(defclass object/top-type-class (object/type-class)
+  ((name :initform t)
+   (reducibility-test-fn :initform (constantly t))
+   (class-reducibility-test-fn :initform
+                               #'(lambda (source target fn-owner)
+                                   (declare (ignore source))
+                                   (cond
+                                     ((eql fn-owner :target) t)
+                                     ((eql fn-owner :source)
+                                      (if (type-class/top-class? target)
+                                          t :loss)))))
+   (properties :initform nil)))
+
+(defmethod type-class/description-string ((type-class object/top-type-class))
+  (declare (ignore type-class))
+  (let ((*print-circle* nil))
+    (format nil "TOP-TYPE-CLASS")))
 
 (defun type-class/top-class? (type-class)
-  (type-class-name-equal (type-class/name type-class) 'top))
+  (typep type-class 'object/top-type-class))
 
 (defun top-type-class ()
-  (load-time-value (make-type-class 'top
-                                    #'(lambda (source target fn-owner)
-                                        (declare (ignore source target))
-                                        (cond
-                                          ((eql fn-owner :target) t)
-                                          ((eql fn-owner :source) :loss)))
-                                    #'(lambda (source target fn-owner)
-                                        (declare (ignore source))
-                                        (cond
-                                          ((eql fn-owner :target) t)
-                                          ((eql fn-owner :source)
-                                           (if (type-class/top-class? target)
-                                               t :loss)))))
-                   t))
+  (load-time-value (make-instance 'object/top-type-class) t))
 
 ;;; *** type variable ***
 
@@ -580,15 +593,20 @@
                :initform (error "TYPE-VARIABLE -- :type-class parameter must be supplied"))
    (cps-connector :initform (make-cps-connector))))
 
-(defun type/type-variable? (entity)
+(defun type-entity/type-variable? (entity)
   (typep entity 'object/type-variable))
 
 (defmethod type-entity/description-string ((entity object/type-variable)
                                            &key no-class-name)
   (let ((*print-circle* nil))
     (let ((descr (with-slots (name type-class) entity
-                   (format nil "~S: ~A" name
-                           (type-class/description-string type-class)))))
+                   (let ((actual-entity (type-entity/actual-entity entity)))
+                     (if (type-entity/type-variable? actual-entity)
+                         (format nil "~S: ~A" name
+                                 (type-class/description-string type-class))
+                         (format nil "~S = ~A: ~A" name
+                                 (type-entity/description-string actual-entity)
+                                 (type-class/description-string type-class)))))))
       (if (not no-class-name)
           (concatenate 'string "{TYPE-VARIABLE " descr "}")
           (concatenate 'string "{" descr "}")))))
@@ -597,7 +615,7 @@
   (apply (alexandria:curry #'make-instance 'object/type-variable
                            :name name
                            :type-class type-class-object)
-         (alexandria:remove-from-plist args :label :type-class)))
+         (alexandria:delete-from-plist args :label :type-class)))
 
 (defun copy-type-variable (entity &optional args)
   (copy-abstract-type-entity
@@ -653,15 +671,18 @@
 
 (defmethod type-entity/reducibility-test ((source-entity object/type-variable)
                                           (target-entity object/type-variable))
-  (let ((result (funcall (type-class/class-reducibility-test-function
-                          (type-variable/type-class target-entity))
-                         (type-variable/type-class source-entity)
-                         (type-variable/type-class target-entity) :target)))
-    (if (eql result t)
-        t
-        (reducibility-test-result-max
-         result
-         (funcall (type-class/class-reducibility-test-function
-                   (type-variable/type-class source-entity))
-                  (type-variable/type-class source-entity)
-                  (type-variable/type-class target-entity) :source)))))
+  (cond
+    ((type-class/top-class? (type-variable/type-class target-entity)) t)
+    ((type-class/top-class? (type-variable/type-class source-entity)) :loss)
+    (t (let ((result (funcall (type-class/class-reducibility-test-function
+                               (type-variable/type-class target-entity))
+                              (type-variable/type-class source-entity)
+                              (type-variable/type-class target-entity) :target)))
+         (if (eql result t)
+             t
+             (reducibility-test-result-max
+              result
+              (funcall (type-class/class-reducibility-test-function
+                        (type-variable/type-class source-entity))
+                       (type-variable/type-class source-entity)
+                       (type-variable/type-class target-entity) :source)))))))

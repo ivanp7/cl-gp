@@ -84,11 +84,13 @@
 
 (labels ((destructively-cut-args-from-plist (key-list plist)
            (iterate:iter
-             (for tail initially plist then (cddr tail))
+             (with tail = plist)
              (while (cddr tail))
-             (when (member (caddr tail) key-list)
-               (nconcing (list (caddr tail) (cadddr tail)))
-               (setf (cddr tail) (cddddr tail)))))
+             (if (member (caddr tail) key-list)
+                 (progn
+                   (nconcing (list (caddr tail) (cadddr tail)))
+                   (setf (cddr tail) (cddddr tail)))
+                 (setf tail (cddr tail)))))
          (make-adjoined-properties-collection (object-class
                                                purpose custom-properties args
                                                functionality-modules)
@@ -231,6 +233,6 @@
       (properties/set-property-value! (object/properties object) key new-value)
       (progn
         (setf (object/properties object)
-              (make-property-collection
-               (list (make-property key new-value))))
+           (make-property-collection
+            (list (make-property key new-value))))
         new-value)))

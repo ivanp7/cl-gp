@@ -2,7 +2,7 @@
 
 (in-package #:cl-gp)
 
-;;; *** selector ***
+;;; *** abstract selector ***
 
 (defclass abstract-selector ()
   ())
@@ -10,15 +10,44 @@
 (defgeneric selector/description-string (selector)
   (:documentation "Get selector description string"))
 
-(defmethod selector/description-string ((selector abstract-selector))
-  (let ((*print-circle* nil))
-    (format nil "~:S" selector)))
+(defmethod print-object ((instance abstract-selector) st)
+  (print-unreadable-object (instance st)
+    (format st (selector/description-string instance))))
 
 (defgeneric copy-selector (selector)
   (:documentation "Copy selector object"))
 
 (defgeneric selector-equal (selector1 selector2)
   (:documentation "Test if selectors are equal"))
+
+;;; *** data selector ***
+
+(defparameter *tag-test* #'eql)
+
+(defclass data-selector (abstract-selector)
+  ((tags :accessor data-selector/tags
+         :initarg :tags
+         :initform nil)))
+
+(defmethod initialize-instance :after ((instance data-selector) &key)
+  (with-slots (tags) instance
+    (setf tags (copy-list tags))))
+
+(defmethod selector/description-string ((selector data-selector))
+  (let ((*print-circle* nil))
+    (format nil "~:S" (data-selector/tags selector))))
+
+(defun make-data-selector (tags-list)
+  (make-instance 'data-selector :tags tags-list))
+
+(defmethod copy-selector ((selector data-selector))
+  (make-data-selector (data-selector/tags selector)))
+
+(defmethod selector-equal ((selector1 data-selector) (selector2 data-selector))
+  (let ((tags1 (data-selector/tags selector1))
+        (tags2 (data-selector/tags selector2)))
+    (and (= (length tags1) (length tags2))
+       (every *tag-test* tags1 tags2))))
 
 ;;; *** arrow ***
 
@@ -131,13 +160,13 @@
 
 (defun connection-equal (conn1 conn2)
   (and (purpose-equal (object/purpose conn1)
-                    (object/purpose conn2))
-     (label-equal (connection/source-label conn1)
-                  (connection/source-label conn2))
-     (label-equal (connection/target-label conn1)
-                  (connection/target-label conn2))
-     (arrow-equal (connection/arrow conn1)
-                  (connection/arrow conn2))))
+                      (object/purpose conn2))
+       (label-equal (connection/source-label conn1)
+                    (connection/source-label conn2))
+       (label-equal (connection/target-label conn1)
+                    (connection/target-label conn2))
+       (arrow-equal (connection/arrow conn1)
+                    (connection/arrow conn2))))
 
 (defparameter +direction/loop+ :loop)
 (defparameter +direction/input+ :input)

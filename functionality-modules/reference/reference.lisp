@@ -40,10 +40,9 @@
 
 (defun make-reference-connection (source-label target-label &rest args)
   (apply (alexandria:curry #'make-connection source-label target-label
-                           :arrow nil
                            :purpose +purpose/reference+
                            :arrow->string-fn (constantly " REF. BY "))
-         (alexandria:remove-from-plist args :arrow :purpose :arrow->string-fn)))
+         (alexandria:delete-from-plist args :arrow :purpose :arrow->string-fn)))
 
 
 
@@ -67,4 +66,13 @@
                   (and (node/reference-source? source-node)
                      (node/reference-target? target-node)
                      (null (graph/input-connections graph (list target-node)
-                                                    :purpose +purpose/reference+))))))))))
+                                                    :purpose +purpose/reference+))))))))
+   :properties-constr-fn-getter
+   #'(lambda (object-class purpose)
+       (if (and (eql object-class 'object/connection)
+              (purpose-equal purpose +purpose/reference+))
+           (values #'(lambda (present-properties &key arrow)
+                       (declare (ignore present-properties))
+                       (if (not (null arrow))
+                           (error "REFERENCE -- reference connection cannot have non-nil arrow")))
+                   '(:arrow))))))

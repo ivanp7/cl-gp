@@ -17,57 +17,100 @@
 (register-info-string-function-package! *type-info-string-function-package*)
 
 (defparameter *boolean-type* (make-primitive-type 'boolean))
-(defparameter *integer-type* (make-primitive-type 'integer))
-(defparameter *number-type*
-  (make-primitive-type 'number :reducibility-test-fn
+
+(defparameter *integer-type*
+  (make-primitive-type 'integer :reducibility-test-fn
                        #'(lambda (source target fn-owner)
-                           (declare (ignore fn-owner))
-                           (if (and (type/primitive-type? source)
-                                  (type/primitive-type? target))
-                               (cond
-                                 ((and (type-name-equal (primitive-type/name source)
-                                                      'integer)
-                                     (type-name-equal (primitive-type/name target)
-                                                      'number))
-                                  t)
-                                 ((and (type-name-equal (primitive-type/name source)
-                                                      'number)
-                                     (type-name-equal (primitive-type/name target)
-                                                      'integer))
-                                  :loss))))))
+                           (let ((other-type (if (eql fn-owner :target)
+                                                 source target)))
+                             (if (and (type/primitive-type? other-type)
+                                    (type-name-equal (primitive-type/name other-type)
+                                                     'float))
+                                 (if (eql fn-owner :target) :loss t))))))
+
+(defparameter *float-type*
+  (make-primitive-type 'float :reducibility-test-fn
+                       #'(lambda (source target fn-owner)
+                           (let ((other-type (if (eql fn-owner :target)
+                                                 source target)))
+                             (if (and (type/primitive-type? other-type)
+                                    (type-name-equal (primitive-type/name other-type)
+                                                     'integer))
+                                 (if (eql fn-owner :target) t :loss))))))
+
+(defparameter *number-type-class*
+  (make-type-class 'number #'(lambda (source target fn-owner)
+                               (let ((data-type (if (eql fn-owner :target)
+                                                    source target)))
+                                 (if (and (type/primitive-type? data-type)
+                                        (let ((name (primitive-type/name data-type)))
+                                          (or (type-name-equal name 'integer)
+                                             (type-name-equal name 'float))))
+                                     t)))
+                   (constantly nil)))
 
 (defparameter *factorial*
   (graph/make-graph
-   (list (make-reference-master-source-node 0 :name 'factorial
-                                            :input-type (make-type-variable :input)
-                                            :output-type (make-type-variable :output))
+   (list (make-reference-master-source-node 0 :name 'factorial)
          (make-node 1 :name 'if
                     :input-type (make-record
                                  (list (make-field 'condition *boolean-type*)
-                                       (make-field 'consequence (make-type-variable :csq))
-                                       (make-field 'alternative (make-type-variable :alt))))
-                    :output-type (make-type-variable :result)
-                    :internal-type-variable-constraints
-                    (list (make-node-internal-type-variable-constraint
-                           #'(lambda (input-type output-type)
-                               (list (field/type (find-if #'(lambda (field)
-                                                              (eql (field/name field)
-                                                                   'consequence))
-                                                          (record/fields input-type)))
-                                     (field/type (find-if #'(lambda (field)
-                                                              (eql (field/name field)
-                                                                   'alternative))
-                                                          (record/fields input-type)))
-                                     output-type)))))
+                                       (make-field 'consequence (make-type-variable 'csq))
+                                       (make-field 'alternative (make-type-variable 'alt))))
+                    :output-type (make-type-variable 'result)
+                    :internal-constraint-collection
+                    (make-internal-type-variable-constraint-collection
+                     (make-node-internal-type-variable-constraint
+                      #'(lambda (input-type output-type)
+                          (nconc (mapcar #'field/type
+                                         (remove-if
+                                          #'(lambda (field)
+                                              (field-name-equal (field/name field)
+                                                                'condition))
+                                          (record/fields input-type)))
+                                 (list output-type))))))
          (make-node 2 :name 1 :output-type *integer-type*)
-         (make-node 3 :name 'zerop :input-type *number-type* :output-type *boolean-type*)
+         (make-node 3 :name 'zerop
+                    :input-type (make-type-variable 'input *number-type-class*)
+                    :output-type *boolean-type*)
          (make-node 4 :name '*
                     :input-type (make-record
-                                 (list (make-field 'value1 *number-type*)
-                                       (make-field 'value2 *number-type*)))
-                    :output-type *number-type*)
+                                 (list (make-field 'arg1
+                                                   (make-type-variable 'arg1
+                                                                       *number-type-class*))
+                                       (make-field 'arg2
+                                                   (make-type-variable 'arg2
+                                                                       *number-type-class*))))
+                    :output-type (make-type-variable 'result *number-type-class*)
+                    :internal-constraint-collection
+                    (make-internal-type-variable-constraint-collection
+                     (make-node-internal-type-variable-constraint
+                      #'(lambda (input-type output-type)
+                          (nconc (mapcar #'field/type (record/fields input-type))
+                                 (list output-type)))
+                      #'(lambda (type-variables-list setter)
+                          (let ((arg1 (find 'arg1 type-variables-list
+                                            :key #'type-variable/name))
+                                (arg2 (find 'arg1 type-variables-list
+                                            :key #'type-variable/name))
+                                (result (find 'result type-variables-list
+                                              :key #'type-variable/name)))
+                            (cond
+                              ((and (type-entity/has-associated-entity? result)
+                                  (not (type-entity/type-variable?
+                                      (type-entity/actual-entity result)))
+                                  (type-name-equal (primitive-type/name
+                                                    (type-entity/actual-entity result))
+                                                   ...)))))))))
          (make-reference-target-node 5)
-         (make-node 6 :name '1- :input-type *number-type* :output-type *number-type*))
+         (make-node 6 :name '1-
+                    :input-type (make-type-variable 'input *number-type-class*)
+                    :output-type (make-type-variable 'output *number-type-class*)
+                    :internal-constraint-collection
+                    (make-internal-type-variable-constraint-collection
+                     (make-node-internal-type-variable-constraint
+                      #'(lambda (input-type output-type)
+                          (list input-type output-type))))))
    (list (make-reference-connection 0 5)
          (make-connection 1 0 :arrow (make-arrow))
          (make-connection 2 1 :arrow (make-arrow :target-selector
@@ -78,9 +121,9 @@
          (make-connection 4 1 :arrow (make-arrow :target-selector
                                                  (make-data-selector '(alternative))))
          (make-connection 0 4 :arrow (make-arrow :target-selector
-                                                 (make-data-selector '(value1))))
+                                                 (make-data-selector '(arg1))))
          (make-connection 5 4 :arrow (make-arrow :target-selector
-                                                 (make-data-selector '(value2))))
+                                                 (make-data-selector '(arg2))))
          (make-connection 6 5 :arrow (make-arrow))
          (make-connection 0 6 :arrow (make-arrow)))))
 
@@ -104,9 +147,9 @@
          (make-connection 4 1 :arrow (make-arrow :target-selector
                                                  (make-data-selector '(alternative))))
          (make-connection 0 4 :arrow (make-arrow :target-selector
-                                                 (make-data-selector '(value1))))
+                                                 (make-data-selector '(arg1))))
          (make-connection 5 4 :arrow (make-arrow :target-selector
-                                                 (make-data-selector '(value2))))
+                                                 (make-data-selector '(arg2))))
          (make-connection 6 5 :arrow (make-arrow))
          (make-connection 0 6 :arrow (make-arrow)))))
 |#

@@ -84,8 +84,8 @@
     (if section
         (progn
           (setf (cdr section)
-             (delete connection (cdr section)
-                     :test #'connection-equal :count 1))
+                (delete connection (cdr section)
+                        :test #'connection-equal :count 1))
           (if (null (cdr section))
               (delete-if #'(lambda (sect)
                              (purpose-equal (car sect) purpose))
@@ -136,10 +136,10 @@
                         (~graph/container graph)
                         #'(lambda (vertex)
                             (and (or (null purpose)
-                                  (purpose-equal purpose
-                                                 (object/purpose (cl-graph:element vertex))))
-                               (member group-label (node/groups (cl-graph:element vertex))
-                                  :test *label-test*)))))))
+                                     (purpose-equal purpose
+                                                    (object/purpose (cl-graph:element vertex))))
+                                 (member group-label (node/groups (cl-graph:element vertex))
+                                         :test *label-test*)))))))
     (values nodes
             (if purpose
                 (list purpose)
@@ -156,8 +156,8 @@
 
 (defun graph/nodes (graph labels-list)
   (let ((nodes (delete nil (mapcar #'(lambda (label)
-                                     (graph/node graph label))
-                                 labels-list))))
+                                       (graph/node graph label))
+                                   labels-list))))
     (values nodes
             (remove-duplicates (mapcar #'object/purpose nodes)
                                :test *purpose-test*))))
@@ -208,11 +208,11 @@
   (when (and node (object/purpose node) (null (object/owner node)))
     (let ((vertex (~graph/vertex graph (node/label node))))
       (when (and (null vertex)
-               (if node-constraint-fn
-                   (funcall node-constraint-fn node graph)
-                   (function-collection/call-all-functions
-                    (object/constraint-function-collection node)
-                    (list node graph))))
+                 (if node-constraint-fn
+                     (funcall node-constraint-fn node graph)
+                     (function-collection/call-all-functions
+                      (object/constraint-function-collection node)
+                      (list node graph))))
         (cl-graph:add-vertex (~graph/container graph) node)
         (setf (slot-value node 'owner) graph)
         (~call-event-handlers node-event-handler-fn node :on-addition-to-graph
@@ -351,9 +351,9 @@
                       (nconcing (delete-if
                                  #'(lambda (edge)
                                      (member (node/label (cl-graph:element
-                                                     (cl-graph:source-vertex edge)))
-                                        target-labels
-                                        :test *label-test*))
+                                                          (cl-graph:source-vertex edge)))
+                                             target-labels
+                                             :test *label-test*))
                                  (cl-graph:target-edges vertex))))))
            (connections (edges->connections purpose edges))
            (purposes (edges->purposes purpose edges)))
@@ -370,9 +370,9 @@
                       (nconcing (delete-if
                                  #'(lambda (edge)
                                      (member (node/label (cl-graph:element
-                                                     (cl-graph:target-vertex edge)))
-                                        source-labels
-                                        :test *label-test*))
+                                                          (cl-graph:target-vertex edge)))
+                                             source-labels
+                                             :test *label-test*))
                                  (cl-graph:source-edges vertex))))))
            (connections (edges->connections purpose edges))
            (purposes (edges->purposes purpose edges)))
@@ -410,11 +410,11 @@
                        (delete-if-not
                         #'(lambda (edge)
                             (and (member (node/label (cl-graph:element (cl-graph:source-vertex edge)))
-                                  source-labels
-                                  :test *label-test*)
-                               (member (node/label (cl-graph:element (cl-graph:target-vertex edge)))
-                                  target-labels
-                                  :test *label-test*)))
+                                         source-labels
+                                         :test *label-test*)
+                                 (member (node/label (cl-graph:element (cl-graph:target-vertex edge)))
+                                         target-labels
+                                         :test *label-test*)))
                         (,edges-fn vertex)))))))
       (let* ((edges (case collection-method
                       (:source (edges-macro source-labels cl-graph:source-edges))
@@ -476,16 +476,16 @@
         (~graph/edge graph (connection/source-label connection)
                      (connection/target-label connection))
       (when (and (and src-vertex tgt-vertex)
-               (if connection-constraint-fn
-                   (funcall connection-constraint-fn
-                            connection graph
+                 (if connection-constraint-fn
+                     (funcall connection-constraint-fn
+                              connection graph
+                              (cl-graph:element src-vertex)
+                              (cl-graph:element tgt-vertex))
+                     (function-collection/call-all-functions
+                      (object/constraint-function-collection connection)
+                      (list connection graph
                             (cl-graph:element src-vertex)
-                            (cl-graph:element tgt-vertex))
-                   (function-collection/call-all-functions
-                    (object/constraint-function-collection connection)
-                    (list connection graph
-                          (cl-graph:element src-vertex)
-                          (cl-graph:element tgt-vertex)))))
+                            (cl-graph:element tgt-vertex)))))
         (if (null edge)
             (cl-graph:add-edge-between-vertexes
              (~graph/container graph) src-vertex tgt-vertex
@@ -650,7 +650,7 @@
            graph (nconc (if (null (getf args :subgraph-properties-copy-fn))
                             (list :subgraph-properties-copy-fn
                                   (graph/subgraph-properties-copy-function graph)))
-                        args))))
+                        (alexandria:delete-from-plist args :subgraph-properties-copy-fn)))))
     (graph/add-nodes! new-graph nodes)
     (graph/connect-set! new-graph connections)
     new-graph))
@@ -675,8 +675,7 @@
                                    (getf args :properties-transfer-fn
                                          (graph/subgraph-properties-copy-function graph))))
                               (funcall properties-transfer-fn (object/properties graph)))))
-                  (alexandria:remove-from-plist
-                   args :properties-transfer-fn)))))
+                  (alexandria:delete-from-plist args :subgraph-properties-copy-fn)))))
     (graph/add-nodes! subgraph nodes)
     (graph/connect-set! subgraph connections)
     subgraph))
