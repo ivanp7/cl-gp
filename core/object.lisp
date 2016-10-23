@@ -81,16 +81,18 @@
       (format st "~A" (subseq str 1 (1- (length str)))))))
 
 
+;;; реализовать создание недостающих свойств при копировании коллекции свойств целиком
+;;; это нужно при копировании объектов после добавления нового функционального модуля
 
 (labels ((destructively-cut-args-from-plist (key-list plist)
            (iterate:iter
-             (with tail = plist)
-             (while (cddr tail))
-             (if (member (caddr tail) key-list)
-                 (progn
-                   (nconcing (list (caddr tail) (cadddr tail)))
-                   (setf (cddr tail) (cddddr tail)))
-                 (setf tail (cddr tail)))))
+            (with tail = plist)
+            (while (cddr tail))
+            (if (member (caddr tail) key-list)
+                (progn
+                  (nconcing (list (caddr tail) (cadddr tail)))
+                  (setf (cddr tail) (cddddr tail)))
+                (setf tail (cddr tail)))))
          (make-adjoined-properties-collection (object-class
                                                purpose custom-properties args
                                                functionality-modules)
@@ -231,6 +233,15 @@
 (defun object/set-property-value! (object key new-value)
   (if (object/properties object)
       (properties/set-property-value! (object/properties object) key new-value)
+      (progn
+        (setf (object/properties object)
+           (make-property-collection
+            (list (make-property key new-value))))
+        new-value)))
+
+(defun object/force-property-value! (object key new-value)
+  (if (object/properties object)
+      (properties/force-property-value! (object/properties object) key new-value)
       (progn
         (setf (object/properties object)
            (make-property-collection

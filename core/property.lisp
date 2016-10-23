@@ -276,9 +276,11 @@
 
 (defun properties/force-property-value! (prop-collection key new-value)
   (let ((property (properties/get-property prop-collection key)))
-    (if (null property)
-        (properties/set-property-value! prop-collection key new-value)
-        (property/force-value! property new-value))))
+    (if property
+        (property/force-value! property new-value)
+        (progn
+          (properties/add-property! prop-collection (make-property key new-value))
+          new-value))))
 
 
 

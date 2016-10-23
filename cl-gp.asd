@@ -10,8 +10,7 @@
   :components
   (;; library core
    (:file "package")
-   (:file "core/constraint-propagation-system" :depends-on ("package"))
-   (:file "core/property" :depends-on ("core/constraint-propagation-system"))
+   (:file "core/property" :depends-on ("package"))
    (:file "core/functionality-module" :depends-on ("package"))
    (:file "core/object" :depends-on ("core/property" "core/functionality-module"))
    (:file "core/base" :depends-on ("core/object"))
@@ -22,7 +21,9 @@
    (:file "core/graph" :depends-on ("core/base"
                                     "core/node"
                                     "core/connection"))
-   (:file "core/core" :depends-on ("core/graph"))
+
+   (:file "core/constraint-propagation-system" :depends-on ("package"))
+   (:file "core/core" :depends-on ("core/graph" "core/constraint-propagation-system"))
 
    ;; functionality modules
    (:file "functionality-modules/reference/reference"

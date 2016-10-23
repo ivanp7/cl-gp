@@ -6,7 +6,7 @@
 
 (defparameter *functionality-module-name-test* #'eql)
 
-(defclass functionality-module ()
+(defclass object/functionality-module ()
   ((name :accessor functionality-module/name
          :initarg :name
          :initform (error "FUNCTIONALITY-MODULE -- :name parameter must be supplied"))
@@ -29,7 +29,7 @@
     :initarg :properties-constr-fn-getter
     :initform (constantly nil))))
 
-(defmethod print-object ((instance functionality-module) st)
+(defmethod print-object ((instance object/functionality-module) st)
   (print-unreadable-object (instance st)
     (with-slots (name info-string-fn) instance
       (let ((info (funcall info-string-fn)))
@@ -38,7 +38,7 @@
             (format st "FUNCTIONALITY-MODULE ~S" name))))))
 
 (defun make-functionality-module (&rest args)
-  (apply (alexandria:curry #'make-instance 'functionality-module) args))
+  (apply (alexandria:curry #'make-instance 'object/functionality-module) args))
 
 (defun copy-functionality-module (module)
   (make-functionality-module
@@ -100,6 +100,6 @@
 
 (defun register-info-string-function-package! (pckg)
   (not (eql *info-string-function-packages*
-            (pushnew pckg *info-string-function-packages*
-                     :test *info-string-function-package-name-test*
-                     :key #'info-string-function-package/name))))
+          (pushnew pckg *info-string-function-packages*
+                   :test *info-string-function-package-name-test*
+                   :key #'info-string-function-package/name))))
